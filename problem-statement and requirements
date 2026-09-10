@@ -1,0 +1,22 @@
+Productivity is easier with accountability. Create a productivity software where you can track details
+about your missions and goals. You should be able to create projects with collaborators who can view
+your goals and add friends who can see all your projects and how far you’ve come working on them. The
+productivity element can be anything from kanban boards to body doubling, but the social aspect is a
+requirement.
+While this system is not required to be developed to be accessed via the web, it must be able to be run on
+multiple different machines while accessing a central database (you will run a database locally for testing
+and development, but it should function as if you were connecting to a database on a central server).
+Course Specifications:
+• Implements user authentication with at least two distinct user types (e.g., administrator
+and member)
+• Implements a dynamic database of user and item data
+• Implements one or more “operations” involving some form of frontend-backend-database
+communication
+Course Expectations:
+• Databases can use any existing dataset or have dummy data. Databases using datasets
+should have at least 100 items. There can be exceptions based on the specific project.
+• New User creation/registration should be available
+• UI design should contain elements commonly found or expected such as a user profile,
+login, logout.
+• Consideration for design aesthetics
+• System should be dynamic and responsive
