@@ -1,5 +1,10 @@
 import { Stack } from 'expo-router';
+import { EventHabitPageStateProvider } from '@/components/event-habit-state';
 
 export default function RootLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <EventHabitPageStateProvider>
+      <Stack screenOptions={{ headerShown: false }} />
+    </EventHabitPageStateProvider>
+  );
 }

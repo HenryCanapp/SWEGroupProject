@@ -7,6 +7,9 @@ const isWebPlatform = Platform.OS === 'web';
 
 export type TaskRecord = NativeDb.TaskRecord;
 export type UserRecord = NativeDb.UserRecord;
+export type EventHabitType = NativeDb.EventHabitType;
+export type EventHabitRecord = NativeDb.EventHabitRecord;
+export type EventHabitInput = NativeDb.EventHabitInput;
 
 const selectedDb = isWebPlatform ? WebDb : NativeDb;
 
@@ -18,3 +21,6 @@ export const isUserLoggedIn = selectedDb.isUserLoggedIn;
 export const addTask = selectedDb.addTask;
 export const getTasks = selectedDb.getTasks;
 export const getTaskCount = selectedDb.getTaskCount;
+export const addEventHabit = selectedDb.addEventHabit;
+export const updateEventHabit = selectedDb.updateEventHabit;
+export const getEventHabits = selectedDb.getEventHabits;
