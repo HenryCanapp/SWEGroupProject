@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
 import { BottomRibbon } from '@/components/bottom-ribbon';
+import { ScreenSwipe } from '@/components/screen-swipe';
 import { isUserLoggedIn, logoutUser } from '@/lib/database';
 
 export default function ProfilePage() {
@@ -21,17 +22,19 @@ export default function ProfilePage() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.text}>Profile</Text>
+    <ScreenSwipe>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <Text style={styles.text}>Profile</Text>
 
-        <Pressable onPress={handleLogout} style={styles.logoutButton}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </Pressable>
+          <Pressable onPress={handleLogout} style={styles.logoutButton}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </Pressable>
 
-        <BottomRibbon />
-      </View>
-    </SafeAreaView>
+          <BottomRibbon />
+        </View>
+      </SafeAreaView>
+    </ScreenSwipe>
   );
 }
 

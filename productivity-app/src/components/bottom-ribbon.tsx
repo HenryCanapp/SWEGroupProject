@@ -2,11 +2,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 
 const options = [
-  { label: 'events', path: '/events' },
-  { label: 'habits', path: '/habits' },
-  { label: 'home', path: '/home' },
-  { label: 'calendar', path: '/calendar' },
-  { label: 'profile', path: '/profile' },
+  { label: 'Events + Habits', path: '/events_and_habits' },
+  { label: 'Social', path: '/social' },
+  { label: 'Home', path: '/home' },
+  { label: 'Calendar', path: '/calendar' },
+  { label: 'Profile', path: '/profile' },
 ] as const;
 
 export function BottomRibbon() {
@@ -47,8 +47,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   optionText: {
-    fontSize: 12,
-    textTransform: 'capitalize',
+    fontSize: 11,
     color: '#111827',
+    textAlign: 'center',
   },
 });

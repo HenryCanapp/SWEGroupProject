@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
 import { BottomRibbon } from '@/components/bottom-ribbon';
+import { ScreenSwipe } from '@/components/screen-swipe';
 import { isUserLoggedIn } from '@/lib/database';
 
 export default function HomePage() {
@@ -16,12 +17,14 @@ export default function HomePage() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.text}>Home</Text>
-        <BottomRibbon />
-      </View>
-    </SafeAreaView>
+    <ScreenSwipe>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <Text style={styles.text}>Home</Text>
+          <BottomRibbon />
+        </View>
+      </SafeAreaView>
+    </ScreenSwipe>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -9,6 +9,8 @@ export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const usernameRef = useRef<TextInput | null>(null);
+  const passwordRef = useRef<TextInput | null>(null);
 
   useEffect(() => {
     initializeDatabase()
@@ -37,6 +39,7 @@ export default function LoginScreen() {
     setUsername('');
     setPassword('');
     setError('Unsuccessful login: username or password incorrect.');
+    usernameRef.current?.focus();
   };
 
   return (
@@ -45,21 +48,37 @@ export default function LoginScreen() {
         <Text style={styles.title}>Login</Text>
 
         <TextInput
+          ref={usernameRef}
           value={username}
-          onChangeText={setUsername}
+          onChangeText={(value) => {
+            setUsername(value);
+            if (error) {
+              setError('');
+            }
+          }}
           placeholder="Username"
           autoCapitalize="none"
           autoCorrect={false}
+          returnKeyType="next"
+          onSubmitEditing={() => passwordRef.current?.focus()}
           style={styles.input}
         />
 
         <TextInput
+          ref={passwordRef}
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(value) => {
+            setPassword(value);
+            if (error) {
+              setError('');
+            }
+          }}
           placeholder="Password"
           secureTextEntry
           autoCapitalize="none"
           autoCorrect={false}
+          returnKeyType="done"
+          onSubmitEditing={handleLogin}
           style={styles.input}
         />
 
