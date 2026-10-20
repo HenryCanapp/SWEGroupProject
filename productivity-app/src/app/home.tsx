@@ -11,6 +11,7 @@ const taskIds = ['today-1', 'today-2', 'upcoming-1', 'upcoming-2'];
 
 export default function HomePage() {
   const [checkedTasks, setCheckedTasks] = useState<string[]>([]);
+  const [expandedTasks, setExpandedTasks] = useState<string[]>([]);
 
   useEffect(() => {
     isUserLoggedIn().then((loggedIn) => {
@@ -42,7 +43,15 @@ export default function HomePage() {
               {taskIds.slice(0, 2).map((taskId) => (
                 <TaskRow
                   key={taskId}
+                  expanded={expandedTasks.includes(taskId)}
                   checked={checkedTasks.includes(taskId)}
+                  onToggleDetails={() =>
+                    setExpandedTasks((current) =>
+                      current.includes(taskId)
+                        ? current.filter((id) => id !== taskId)
+                        : [...current, taskId]
+                    )
+                  }
                   onToggle={() =>
                     setCheckedTasks((current) =>
                       current.includes(taskId)
@@ -59,7 +68,15 @@ export default function HomePage() {
               {taskIds.slice(2).map((taskId) => (
                 <TaskRow
                   key={taskId}
+                  expanded={expandedTasks.includes(taskId)}
                   checked={checkedTasks.includes(taskId)}
+                  onToggleDetails={() =>
+                    setExpandedTasks((current) =>
+                      current.includes(taskId)
+                        ? current.filter((id) => id !== taskId)
+                        : [...current, taskId]
+                    )
+                  }
                   onToggle={() =>
                     setCheckedTasks((current) =>
                       current.includes(taskId)
@@ -78,7 +95,6 @@ export default function HomePage() {
               style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
             >
               <Text style={styles.addIcon}>+</Text>
-              <Text style={styles.addLabel}>Events + Habits</Text>
             </Pressable>
           </ScrollView>
           <BottomRibbon />
@@ -120,20 +136,55 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   taskRow: {
-    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  taskCard: {
     marginBottom: 10,
-    paddingHorizontal: 16,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#e5e7eb',
     borderRadius: 12,
     backgroundColor: '#f9fafb',
   },
+  taskCardChecked: {
+    borderColor: 'rgba(22, 163, 74, 0.45)',
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+  },
   taskText: {
     color: '#1f2937',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  taskActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailsButton: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  detailsButtonText: {
+    color: '#2563eb',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  detailsChevron: {
+    marginLeft: 4,
+    color: '#2563eb',
+    fontSize: 12,
+  },
+  taskTime: {
+    color: '#4b5563',
+    fontSize: 13,
+    fontWeight: '500',
   },
   checkbox: {
     width: 24,
@@ -146,14 +197,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   checkboxChecked: {
-    borderColor: '#2563eb',
-    backgroundColor: '#2563eb',
+    borderColor: '#16a34a',
+    backgroundColor: 'rgba(34, 197, 94, 0.3)',
   },
   checkmark: {
-    color: '#ffffff',
+    color: '#15803d',
     fontSize: 16,
     fontWeight: '700',
     lineHeight: 18,
+  },
+  taskDetails: {
+    paddingHorizontal: 14,
+    paddingTop: 2,
+    paddingBottom: 12,
+  },
+  taskDetailText: {
+    marginTop: 6,
+    color: '#374151',
+    fontSize: 14,
   },
   addButton: {
     minHeight: 104,
@@ -171,36 +232,56 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     lineHeight: 40,
   },
-  addLabel: {
-    marginTop: 4,
-    color: '#374151',
-    fontSize: 14,
-    fontWeight: '600',
-  },
   pressed: {
     opacity: 0.7,
   },
 });
 
 function TaskRow({
+  expanded,
   checked,
+  onToggleDetails,
   onToggle,
 }: {
+  expanded: boolean;
   checked: boolean;
+  onToggleDetails: () => void;
   onToggle: () => void;
 }) {
   return (
-    <View style={styles.taskRow}>
-      <Text style={styles.taskText}>Temp</Text>
-      <Pressable
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked }}
-        accessibilityLabel="Mark temp task complete"
-        onPress={onToggle}
-        style={[styles.checkbox, checked && styles.checkboxChecked]}
-      >
-        {checked && <Text style={styles.checkmark}>✓</Text>}
-      </Pressable>
+    <View style={[styles.taskCard, checked && styles.taskCardChecked]}>
+      <View style={styles.taskRow}>
+        <Text style={styles.taskText}>Temp</Text>
+        <View style={styles.taskActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded }}
+            accessibilityLabel={expanded ? 'Hide task details' : 'Show task details'}
+            onPress={onToggleDetails}
+            style={styles.detailsButton}
+          >
+            <Text style={styles.detailsButtonText}>Details</Text>
+            <Text style={styles.detailsChevron}>{expanded ? '▲' : '▼'}</Text>
+          </Pressable>
+          <Text style={styles.taskTime}>Time: Temp</Text>
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked }}
+            accessibilityLabel="Mark temp task complete"
+            onPress={onToggle}
+            style={[styles.checkbox, checked && styles.checkboxChecked]}
+          >
+            {checked && <Text style={styles.checkmark}>✓</Text>}
+          </Pressable>
+        </View>
+      </View>
+      {expanded && (
+        <View style={styles.taskDetails}>
+          <Text style={styles.taskDetailText}>Description: Temp</Text>
+          <Text style={styles.taskDetailText}>Location: Temp</Text>
+          <Text style={styles.taskDetailText}>Event type: Temp (one-time or recurring)</Text>
+        </View>
+      )}
     </View>
   );
 }
