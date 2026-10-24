@@ -7,6 +7,9 @@ const isWebPlatform = Platform.OS === 'web';
 
 export type TaskRecord = NativeDb.TaskRecord;
 export type UserRecord = NativeDb.UserRecord;
+export type CurrentUser = NativeDb.CurrentUser;
+export type ProfileRecord = NativeDb.ProfileRecord;
+export type ProfileInput = NativeDb.ProfileInput;
 
 const selectedDb = isWebPlatform ? WebDb : NativeDb;
 
@@ -18,3 +21,6 @@ export const isUserLoggedIn = selectedDb.isUserLoggedIn;
 export const addTask = selectedDb.addTask;
 export const getTasks = selectedDb.getTasks;
 export const getTaskCount = selectedDb.getTaskCount;
+export const getCurrentUser = selectedDb.getCurrentUser;
+export const getProfile = selectedDb.getProfile;
+export const saveProfile = selectedDb.saveProfile;
