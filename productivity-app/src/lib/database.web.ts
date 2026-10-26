@@ -52,8 +52,6 @@ export type ProfileInput = Pick<ProfileRecord, 'display_name' | 'about_me' | 'av
 
 type StoredProfile = Omit<ProfileRecord, 'username'> & { updated_at: string };
 
-const USER_STORAGE_KEY = 'productivity_app_users';
-const TASK_STORAGE_KEY = 'productivity_app_tasks';
 const PROFILE_STORAGE_KEY = 'productivity_app_profiles';
 
 function getUsers(): UserRecord[] {
@@ -103,13 +101,11 @@ function setTasks(tasks: TaskRecord[]) {
 }
 
 function getEventHabitsFromStorage(): EventHabitRecord[] {
-function getProfilesFromStorage(): StoredProfile[] {
   if (typeof localStorage === 'undefined') {
     return [];
   }
 
   const raw = localStorage.getItem(EVENT_HABIT_STORAGE_KEY);
-  const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
   if (!raw) {
     return [];
   }
@@ -127,6 +123,22 @@ function getProfilesFromStorage(): StoredProfile[] {
       selected_days: record.selected_days ?? '[]',
       day_times: record.day_times ?? '{}',
     })) as EventHabitRecord[];
+  } catch {
+    return [];
+  }
+}
+
+function getProfilesFromStorage(): StoredProfile[] {
+  if (typeof localStorage === 'undefined') {
+    return [];
+  }
+
+  const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
+  if (!raw) {
+    return [];
+  }
+
+  try {
     return JSON.parse(raw) as StoredProfile[];
   } catch {
     return [];
@@ -262,6 +274,8 @@ export async function getEventHabits() {
   return getEventHabitsFromStorage()
     .filter((record) => record.user_id === user.id)
     .sort((first, second) => second.created_at.localeCompare(first.created_at));
+}
+
 export async function getProfile(): Promise<ProfileRecord | null> {
   const user = await getCurrentUser();
   if (!user) {

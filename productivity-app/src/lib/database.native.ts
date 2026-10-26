@@ -234,6 +234,9 @@ export async function getEventHabits() {
      FROM events_habits
      WHERE user_id = (SELECT id FROM users WHERE is_logged_in = 1 LIMIT 1)
      ORDER BY created_at DESC, id DESC`
+  );
+}
+
 export async function getProfile() {
   return db.getFirstAsync<ProfileRecord>(
     `SELECT users.id AS user_id, users.username,
