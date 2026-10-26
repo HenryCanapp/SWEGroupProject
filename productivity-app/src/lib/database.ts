@@ -10,6 +10,9 @@ export type UserRecord = NativeDb.UserRecord;
 export type EventHabitType = NativeDb.EventHabitType;
 export type EventHabitRecord = NativeDb.EventHabitRecord;
 export type EventHabitInput = NativeDb.EventHabitInput;
+export type CurrentUser = NativeDb.CurrentUser;
+export type ProfileRecord = NativeDb.ProfileRecord;
+export type ProfileInput = NativeDb.ProfileInput;
 
 const selectedDb = isWebPlatform ? WebDb : NativeDb;
 
@@ -24,3 +27,6 @@ export const getTaskCount = selectedDb.getTaskCount;
 export const addEventHabit = selectedDb.addEventHabit;
 export const updateEventHabit = selectedDb.updateEventHabit;
 export const getEventHabits = selectedDb.getEventHabits;
+export const getCurrentUser = selectedDb.getCurrentUser;
+export const getProfile = selectedDb.getProfile;
+export const saveProfile = selectedDb.saveProfile;

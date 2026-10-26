@@ -34,6 +34,21 @@ export type EventHabitRecord = {
   created_at: string;
 };
 
+export type CurrentUser = {
+  id: number;
+  username: string;
+};
+
+export type ProfileRecord = {
+  user_id: number;
+  username: string;
+  display_name: string;
+  about_me: string;
+  avatar_uri: string;
+};
+
+export type ProfileInput = Pick<ProfileRecord, 'display_name' | 'about_me' | 'avatar_uri'>;
+
 export async function initializeDatabase() {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS users (
@@ -60,6 +75,12 @@ export async function initializeDatabase() {
       title TEXT NOT NULL,
       type TEXT NOT NULL CHECK (type IN ('event', 'habit')),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CREATE TABLE IF NOT EXISTS profiles (
+      user_id INTEGER PRIMARY KEY,
+      display_name TEXT NOT NULL DEFAULT '',
+      about_me TEXT NOT NULL DEFAULT '',
+      avatar_uri TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users (id)
     );
   `);
@@ -117,13 +138,15 @@ export async function logoutUser() {
   await db.runAsync('UPDATE users SET is_logged_in = 0');
 }
 
-export async function isUserLoggedIn() {
-  const result = await db.getFirstAsync<{ is_logged_in: number }>(
-    'SELECT is_logged_in FROM users WHERE username = ? LIMIT 1',
-    ['user']
+export async function getCurrentUser() {
+  return db.getFirstAsync<CurrentUser>(
+    'SELECT id, username FROM users WHERE is_logged_in = 1 LIMIT 1'
   );
+}
 
-  return !!result && result.is_logged_in === 1;
+export async function isUserLoggedIn() {
+  const user = await getCurrentUser();
+  return !!user;
 }
 
 export async function addTask(title: string) {
@@ -211,5 +234,34 @@ export async function getEventHabits() {
      FROM events_habits
      WHERE user_id = (SELECT id FROM users WHERE is_logged_in = 1 LIMIT 1)
      ORDER BY created_at DESC, id DESC`
+export async function getProfile() {
+  return db.getFirstAsync<ProfileRecord>(
+    `SELECT users.id AS user_id, users.username,
+            COALESCE(profiles.display_name, '') AS display_name,
+            COALESCE(profiles.about_me, '') AS about_me,
+            COALESCE(profiles.avatar_uri, '') AS avatar_uri
+     FROM users
+     LEFT JOIN profiles ON profiles.user_id = users.id
+     WHERE users.is_logged_in = 1
+     LIMIT 1`
+  );
+}
+
+export async function saveProfile(input: ProfileInput) {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('Cannot save a profile without a logged-in user.');
+  }
+
+  await db.runAsync(
+    `INSERT INTO profiles (user_id, display_name, about_me, avatar_uri, updated_at)
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(user_id) DO UPDATE SET
+       display_name = excluded.display_name,
+       about_me = excluded.about_me,
+       avatar_uri = excluded.avatar_uri,
+       updated_at = CURRENT_TIMESTAMP`,
+    [user.id, input.display_name, input.about_me, input.avatar_uri]
   );
 }
