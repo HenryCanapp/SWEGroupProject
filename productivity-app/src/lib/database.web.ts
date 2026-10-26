@@ -12,6 +12,29 @@ export type UserRecord = {
   is_logged_in: number;
 };
 
+export type EventHabitType = 'event' | 'habit';
+
+export type EventHabitRecord = {
+  id: number;
+  user_id: number;
+  title: string;
+  type: EventHabitType;
+  date: string;
+  time: string;
+  location: string;
+  details: string;
+  importance: number;
+  recurrence: string;
+  selected_days: string;
+  day_times: string;
+  created_at: string;
+};
+
+export type EventHabitInput = Omit<EventHabitRecord, 'id' | 'user_id' | 'created_at'>;
+
+const USER_STORAGE_KEY = 'productivity_app_users';
+const TASK_STORAGE_KEY = 'productivity_app_tasks';
+const EVENT_HABIT_STORAGE_KEY = 'productivity_app_events_habits';
 export type CurrentUser = {
   id: number;
   username: string;
@@ -79,21 +102,45 @@ function setTasks(tasks: TaskRecord[]) {
   }
 }
 
+function getEventHabitsFromStorage(): EventHabitRecord[] {
 function getProfilesFromStorage(): StoredProfile[] {
   if (typeof localStorage === 'undefined') {
     return [];
   }
 
+  const raw = localStorage.getItem(EVENT_HABIT_STORAGE_KEY);
   const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
   if (!raw) {
     return [];
   }
 
   try {
+    const records = JSON.parse(raw) as Partial<EventHabitRecord>[];
+    return records.map((record) => ({
+      ...record,
+      date: record.date ?? '',
+      time: record.time ?? '',
+      location: record.location ?? '',
+      details: record.details ?? '',
+      importance: record.importance ?? 3,
+      recurrence: record.recurrence ?? 'weekly',
+      selected_days: record.selected_days ?? '[]',
+      day_times: record.day_times ?? '{}',
+    })) as EventHabitRecord[];
     return JSON.parse(raw) as StoredProfile[];
   } catch {
     return [];
   }
+}
+
+function setEventHabits(records: EventHabitRecord[]) {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(EVENT_HABIT_STORAGE_KEY, JSON.stringify(records));
+  }
+}
+
+function getLoggedInUser(): UserRecord | undefined {
+  return getUsers().find((user) => user.is_logged_in === 1);
 }
 
 function setProfiles(profiles: StoredProfile[]) {
@@ -113,6 +160,10 @@ export async function initializeDatabase() {
 
   if (!localStorage.getItem(TASK_STORAGE_KEY)) {
     setTasks([]);
+  }
+
+  if (!localStorage.getItem(EVENT_HABIT_STORAGE_KEY)) {
+    setEventHabits([]);
   }
 }
 
@@ -173,6 +224,44 @@ export async function getTaskCount() {
   return getTasksFromStorage().length;
 }
 
+export async function addEventHabit(input: EventHabitInput) {
+  const user = getLoggedInUser();
+  if (!user) {
+    throw new Error('Cannot add an event or habit without a logged-in user.');
+  }
+
+  const newRecord: EventHabitRecord = {
+    id: Date.now(),
+    user_id: user.id,
+    ...input,
+    created_at: new Date().toISOString(),
+  };
+
+  setEventHabits([newRecord, ...getEventHabitsFromStorage()]);
+}
+
+export async function updateEventHabit(id: number, input: EventHabitInput) {
+  const user = getLoggedInUser();
+  if (!user) {
+    throw new Error('Cannot update an event or habit without a logged-in user.');
+  }
+
+  setEventHabits(
+    getEventHabitsFromStorage().map((record) =>
+      record.id === id && record.user_id === user.id ? { ...record, ...input } : record
+    )
+  );
+}
+
+export async function getEventHabits() {
+  const user = getLoggedInUser();
+  if (!user) {
+    return [];
+  }
+
+  return getEventHabitsFromStorage()
+    .filter((record) => record.user_id === user.id)
+    .sort((first, second) => second.created_at.localeCompare(first.created_at));
 export async function getProfile(): Promise<ProfileRecord | null> {
   const user = await getCurrentUser();
   if (!user) {
