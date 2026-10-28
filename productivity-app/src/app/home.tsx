@@ -1,25 +1,60 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { type Href, router } from 'expo-router';
+import { type Href, router, useFocusEffect } from 'expo-router';
 
 import { BottomRibbon } from '@/components/bottom-ribbon';
 import { ScreenSwipe } from '@/components/screen-swipe';
-import { isUserLoggedIn } from '@/lib/database';
-
-const taskIds = ['today-1', 'today-2', 'upcoming-1', 'upcoming-2'];
+import { getEventHabits, isUserLoggedIn } from '@/lib/database';
+import type { EventHabitRecord } from '@/lib/database';
+import { getEventHabitOccurrences } from '@/lib/event-habit-occurrences';
+import type { EventHabitOccurrence } from '@/lib/event-habit-occurrences';
 
 export default function HomePage() {
-  const [checkedTasks, setCheckedTasks] = useState<string[]>([]);
-  const [expandedTasks, setExpandedTasks] = useState<string[]>([]);
+  const [records, setRecords] = useState<EventHabitRecord[]>([]);
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [loadError, setLoadError] = useState('');
 
-  useEffect(() => {
-    isUserLoggedIn().then((loggedIn) => {
-      if (!loggedIn) {
-        router.replace('/');
-      }
-    });
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const loadRecords = async () => {
+        const loggedIn = await isUserLoggedIn();
+        if (!loggedIn) {
+          router.replace('/');
+          return;
+        }
+
+        const eventHabits = await getEventHabits();
+        if (isActive) {
+          setRecords(eventHabits);
+          setCurrentDate(new Date());
+          setLoadError('');
+        }
+      };
+
+      loadRecords().catch((error: unknown) => {
+        console.error('Unable to load home schedule:', error);
+        if (isActive) {
+          setLoadError('Unable to load your schedule.');
+        }
+      });
+
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
+
+  const todayKey = formatDate(currentDate);
+  const upcomingEnd = addDays(currentDate, 7);
+  const occurrences = useMemo(
+    () => getEventHabitOccurrences(records, currentDate, upcomingEnd),
+    [currentDate, records, upcomingEnd]
+  );
+  const todayItems = occurrences.filter((item) => item.date === todayKey);
+  const upcomingItems = occurrences.filter((item) => item.date > todayKey);
 
   return (
     <ScreenSwipe>
@@ -30,7 +65,7 @@ export default function HomePage() {
             showsVerticalScrollIndicator={false}
           >
             <Text style={styles.date}>
-              {new Date().toLocaleDateString(undefined, {
+              {currentDate.toLocaleDateString(undefined, {
                 weekday: 'long',
                 month: 'long',
                 day: 'numeric',
@@ -38,54 +73,28 @@ export default function HomePage() {
               })}
             </Text>
 
+            {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
+
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Today:</Text>
-              {taskIds.slice(0, 2).map((taskId) => (
-                <TaskRow
-                  key={taskId}
-                  expanded={expandedTasks.includes(taskId)}
-                  checked={checkedTasks.includes(taskId)}
-                  onToggleDetails={() =>
-                    setExpandedTasks((current) =>
-                      current.includes(taskId)
-                        ? current.filter((id) => id !== taskId)
-                        : [...current, taskId]
-                    )
-                  }
-                  onToggle={() =>
-                    setCheckedTasks((current) =>
-                      current.includes(taskId)
-                        ? current.filter((id) => id !== taskId)
-                        : [...current, taskId]
-                    )
-                  }
-                />
-              ))}
+              <Text style={styles.sectionTitle}>Today</Text>
+              {todayItems.length ? (
+                todayItems.map((item) => (
+                  <ScheduledItem key={`${item.id}-${item.date}`} item={item} />
+                ))
+              ) : (
+                <Text style={styles.emptyText}>Nothing scheduled for today.</Text>
+              )}
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Upcoming:</Text>
-              {taskIds.slice(2).map((taskId) => (
-                <TaskRow
-                  key={taskId}
-                  expanded={expandedTasks.includes(taskId)}
-                  checked={checkedTasks.includes(taskId)}
-                  onToggleDetails={() =>
-                    setExpandedTasks((current) =>
-                      current.includes(taskId)
-                        ? current.filter((id) => id !== taskId)
-                        : [...current, taskId]
-                    )
-                  }
-                  onToggle={() =>
-                    setCheckedTasks((current) =>
-                      current.includes(taskId)
-                        ? current.filter((id) => id !== taskId)
-                        : [...current, taskId]
-                    )
-                  }
-                />
-              ))}
+              <Text style={styles.sectionTitle}>Upcoming</Text>
+              {upcomingItems.length ? (
+                upcomingItems.map((item) => (
+                  <ScheduledItem key={`${item.id}-${item.date}`} item={item} />
+                ))
+              ) : (
+                <Text style={styles.emptyText}>Nothing else scheduled this week.</Text>
+              )}
             </View>
 
             <Pressable
@@ -102,6 +111,38 @@ export default function HomePage() {
       </SafeAreaView>
     </ScreenSwipe>
   );
+}
+
+function ScheduledItem({ item }: { item: EventHabitOccurrence }) {
+  return (
+    <View style={styles.taskCard}>
+      <View style={styles.taskRow}>
+        <View style={styles.itemCopy}>
+          <Text style={styles.taskText}>{item.title}</Text>
+          <Text style={styles.itemMeta}>
+            {item.type === 'event' ? 'Event' : 'Habit'}
+            {item.time ? ` · ${item.time}` : ''}
+          </Text>
+        </View>
+      </View>
+      {item.details ? <Text style={styles.taskDetailText}>{item.details}</Text> : null}
+      {item.location ? <Text style={styles.taskDetailText}>{item.location}</Text> : null}
+    </View>
+  );
+}
+
+function formatDate(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function addDays(date: Date, amount: number) {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  result.setDate(result.getDate() + amount);
+  return result;
 }
 
 const styles = StyleSheet.create({
@@ -137,8 +178,6 @@ const styles = StyleSheet.create({
   },
   taskRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -150,72 +189,25 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#f9fafb',
   },
-  taskCardChecked: {
-    borderColor: 'rgba(22, 163, 74, 0.45)',
-    backgroundColor: 'rgba(34, 197, 94, 0.2)',
-  },
+  itemCopy: { flex: 1 },
   taskText: {
     color: '#1f2937',
     fontSize: 16,
     fontWeight: '600',
   },
-  taskActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailsButton: {
-    minHeight: 32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  detailsButtonText: {
-    color: '#2563eb',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  detailsChevron: {
-    marginLeft: 4,
-    color: '#2563eb',
-    fontSize: 12,
-  },
-  taskTime: {
+  itemMeta: {
     color: '#4b5563',
     fontSize: 13,
     fontWeight: '500',
   },
-  checkbox: {
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#9ca3af',
-    borderRadius: 5,
-    backgroundColor: '#ffffff',
-  },
-  checkboxChecked: {
-    borderColor: '#16a34a',
-    backgroundColor: 'rgba(34, 197, 94, 0.3)',
-  },
-  checkmark: {
-    color: '#15803d',
-    fontSize: 16,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  taskDetails: {
-    paddingHorizontal: 14,
-    paddingTop: 2,
-    paddingBottom: 12,
-  },
   taskDetailText: {
-    marginTop: 6,
+    paddingHorizontal: 14,
+    paddingBottom: 8,
     color: '#374151',
     fontSize: 14,
   },
+  emptyText: { color: '#6b7280', fontSize: 15, paddingVertical: 8 },
+  errorText: { color: '#b91c1c', fontSize: 14, marginBottom: 12 },
   addButton: {
     minHeight: 104,
     alignItems: 'center',
@@ -236,52 +228,3 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
 });
-
-function TaskRow({
-  expanded,
-  checked,
-  onToggleDetails,
-  onToggle,
-}: {
-  expanded: boolean;
-  checked: boolean;
-  onToggleDetails: () => void;
-  onToggle: () => void;
-}) {
-  return (
-    <View style={[styles.taskCard, checked && styles.taskCardChecked]}>
-      <View style={styles.taskRow}>
-        <Text style={styles.taskText}>Temp</Text>
-        <View style={styles.taskActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ expanded }}
-            accessibilityLabel={expanded ? 'Hide task details' : 'Show task details'}
-            onPress={onToggleDetails}
-            style={styles.detailsButton}
-          >
-            <Text style={styles.detailsButtonText}>Details</Text>
-            <Text style={styles.detailsChevron}>{expanded ? '▲' : '▼'}</Text>
-          </Pressable>
-          <Text style={styles.taskTime}>Time: Temp</Text>
-          <Pressable
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked }}
-            accessibilityLabel="Mark temp task complete"
-            onPress={onToggle}
-            style={[styles.checkbox, checked && styles.checkboxChecked]}
-          >
-            {checked && <Text style={styles.checkmark}>✓</Text>}
-          </Pressable>
-        </View>
-      </View>
-      {expanded && (
-        <View style={styles.taskDetails}>
-          <Text style={styles.taskDetailText}>Description: Temp</Text>
-          <Text style={styles.taskDetailText}>Location: Temp</Text>
-          <Text style={styles.taskDetailText}>Event type: Temp (one-time or recurring)</Text>
-        </View>
-      )}
-    </View>
-  );
-}

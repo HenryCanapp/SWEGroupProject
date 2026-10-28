@@ -74,7 +74,11 @@ export async function initializeDatabase() {
       user_id INTEGER NOT NULL,
       title TEXT NOT NULL,
       type TEXT NOT NULL CHECK (type IN ('event', 'habit')),
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await db.execAsync(`
     CREATE TABLE IF NOT EXISTS profiles (
       user_id INTEGER PRIMARY KEY,
       display_name TEXT NOT NULL DEFAULT '',

@@ -1,4 +1,4 @@
-import { createElement, useEffect, useMemo, useState } from 'react';
+import { createElement, useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -16,7 +16,7 @@ import DateTimePicker, {
   DateTimePickerAndroid,
 } from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import { BottomRibbon } from '@/components/bottom-ribbon';
 import { useEventHabitPageState } from '@/components/event-habit-state';
@@ -184,42 +184,35 @@ export default function EventsAndHabitsPage() {
     setRecords(eventHabits);
   };
 
-  useEffect(() => {
-    let isMounted = true;
-    isUserLoggedIn()
-      .then((loggedIn) => {
-        if (!loggedIn) {
-          router.replace('/');
-          return;
-        }
-        return getEventHabits();
-      })
-      .then((eventHabits) => {
-        if (isMounted && eventHabits) {
-          setRecords(eventHabits);
-        }
-      })
-      .catch((loadError) => {
-        console.error('Unable to load events and habits:', loadError);
-        setError('Unable to load your events and habits.');
-      });
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      isUserLoggedIn()
+        .then((loggedIn) => {
+          if (!loggedIn) {
+            router.replace('/');
+            return;
+          }
+          return getEventHabits();
+        })
+        .then((eventHabits) => {
+          if (isMounted && eventHabits) {
+            setRecords(eventHabits);
+          }
+        })
+        .catch((loadError) => {
+          console.error('Unable to load events and habits:', loadError);
+          setError('Unable to load your events and habits.');
+        });
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!editorOpen) {
-      setRequiredFieldsInvalid(false);
-      setError('');
-    }
-  }, [editorOpen]);
+      return () => {
+        isMounted = false;
+      };
+    }, [])
+  );
 
   const filteredRecords = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
-    const today = new Date().toISOString().slice(0, 10);
-
     return records.filter((record) => {
       const matchesFilter = filter === 'all' || record.type === filter;
       const matchesSearch =
@@ -227,9 +220,8 @@ export default function EventsAndHabitsPage() {
         [record.title, record.location, record.details].some((value) =>
           value.toLowerCase().includes(normalizedSearch)
         );
-      const hasStarted = record.type === 'event' || !record.date || record.date <= today;
 
-      return matchesFilter && matchesSearch && hasStarted;
+      return matchesFilter && matchesSearch;
     });
   }, [filter, records, search]);
 

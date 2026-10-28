@@ -1,43 +1,5 @@
-import { useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-
-import { BottomRibbon } from '@/components/bottom-ribbon';
-import { isUserLoggedIn } from '@/lib/database';
+import { Redirect } from 'expo-router';
 
 export default function HabitsPage() {
-  useEffect(() => {
-    isUserLoggedIn().then((loggedIn) => {
-      if (!loggedIn) {
-        router.replace('/');
-      }
-    });
-  }, []);
-
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.text}>Habits</Text>
-        <BottomRibbon />
-      </View>
-    </SafeAreaView>
-  );
+  return <Redirect href="/events_and_habits" />;
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 80,
-  },
-  text: {
-    fontSize: 32,
-    fontWeight: '600',
-  },
-});

@@ -1,35 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import { BottomRibbon } from '@/components/bottom-ribbon';
 import { ScreenSwipe } from '@/components/screen-swipe';
-import { isUserLoggedIn } from '@/lib/database';
+import { getEventHabits, isUserLoggedIn } from '@/lib/database';
+import type { EventHabitRecord } from '@/lib/database';
+import { getEventHabitOccurrences } from '@/lib/event-habit-occurrences';
 
 const dayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const selectedCircleSize = 50;
-
-type CalendarItem = {
-  id: string;
-  type: 'task' | 'habit';
-  text: string;
-  date: string;
-};
-
-const calendarItems: CalendarItem[] = [
-  { id: 'task-1', type: 'task', text: 'Finish project brief', date: formatDate(new Date()) },
-  { id: 'task-2', type: 'task', text: 'Reply to team messages', date: formatDate(new Date(Date.now() + 86400000)) },
-  { id: 'habit-1', type: 'habit', text: 'Morning walk', date: formatDate(new Date()) },
-  { id: 'habit-2', type: 'habit', text: 'Read 20 pages', date: formatDate(new Date(Date.now() + 172800000)) },
-  { id: 'habit-3', type: 'habit', text: 'Stretch for 10 minutes', date: formatDate(new Date()) },
-  { id: 'task-3', type: 'task', text: 'Plan next sprint', date: formatDate(new Date(Date.now() - 86400000)) },
-];
-
-function getItemsForDate(date: Date) {
-  const key = formatDate(date);
-  return calendarItems.filter((item) => item.date === key);
-}
 
 function formatDate(date: Date) {
   const year = date.getFullYear();
@@ -39,28 +20,44 @@ function formatDate(date: Date) {
 }
 
 export default function CalendarPage() {
-  const today = useMemo(() => new Date(), []);
+  const [records, setRecords] = useState<EventHabitRecord[]>([]);
+  const [today, setToday] = useState(() => new Date());
   const [viewDate, setViewDate] = useState(
     new Date(today.getFullYear(), today.getMonth(), 1)
   );
   const [selectedDate, setSelectedDate] = useState(today);
 
-  useEffect(() => {
-    isUserLoggedIn().then((loggedIn) => {
-      if (!loggedIn) {
-        router.replace('/');
-      }
-    });
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const loadRecords = async () => {
+        const loggedIn = await isUserLoggedIn();
+        if (!loggedIn) {
+          router.replace('/');
+          return;
+        }
+
+        const eventHabits = await getEventHabits();
+        if (isActive) {
+          setRecords(eventHabits);
+          setToday(new Date());
+        }
+      };
+
+      loadRecords().catch((error: unknown) => {
+        console.error('Unable to load calendar schedule:', error);
+      });
+
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
 
   const monthName = viewDate.toLocaleString('en-US', { month: 'long' });
   const year = viewDate.getFullYear();
   const selectedDateKey = formatDate(selectedDate);
-
-  const selectedItems = useMemo(
-    () => getItemsForDate(selectedDate),
-    [selectedDateKey]
-  );
 
   const calendarDays = useMemo(() => {
     const firstOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
@@ -69,7 +66,7 @@ export default function CalendarPage() {
     const leadingDays = firstOfMonth.getDay();
     const totalCells = Math.ceil((leadingDays + daysInMonth) / 7) * 7;
 
-    const cells: Array<{ value: number; isCurrentMonth: boolean; actualDate: Date }> = [];
+    const cells: { value: number; isCurrentMonth: boolean; actualDate: Date }[] = [];
 
     for (let i = 0; i < totalCells; i++) {
       const dayNumber = i - leadingDays + 1;
@@ -93,6 +90,20 @@ export default function CalendarPage() {
 
     return cells;
   }, [viewDate]);
+
+  const calendarItems = useMemo(
+    () =>
+      getEventHabitOccurrences(
+        records,
+        calendarDays[0].actualDate,
+        calendarDays[calendarDays.length - 1].actualDate
+      ),
+    [calendarDays, records]
+  );
+  const selectedItems = useMemo(
+    () => calendarItems.filter((item) => item.date === selectedDateKey),
+    [calendarItems, selectedDateKey]
+  );
 
   const goToPreviousMonth = () => {
     setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
@@ -134,8 +145,9 @@ export default function CalendarPage() {
                 const isSelected = formatDate(selectedDate) === formatDate(day.actualDate);
                 const isToday = formatDate(today) === formatDate(day.actualDate);
 
-                const itemsForDay = getItemsForDate(day.actualDate);
-                const hasTask = itemsForDay.some((item) => item.type === 'task');
+                const dayKey = formatDate(day.actualDate);
+                const itemsForDay = calendarItems.filter((item) => item.date === dayKey);
+                const hasEvent = itemsForDay.some((item) => item.type === 'event');
                 const hasHabit = itemsForDay.some((item) => item.type === 'habit');
 
                 return (
@@ -159,8 +171,8 @@ export default function CalendarPage() {
 
                     {itemsForDay.length > 0 && (
                       <View style={styles.dotRow}>
-                        {hasHabit && <View style={[styles.dot, styles.habitDot, hasTask && styles.offsetHabitDot]} />}
-                        {hasTask && <View style={[styles.dot, styles.taskDot, hasHabit && styles.offsetTaskDot]} />}
+                        {hasHabit && <View style={[styles.dot, styles.habitDot, hasEvent && styles.offsetHabitDot]} />}
+                        {hasEvent && <View style={[styles.dot, styles.eventDot, hasHabit && styles.offsetEventDot]} />}
                       </View>
                     )}
                   </Pressable>
@@ -174,12 +186,15 @@ export default function CalendarPage() {
             {selectedItems.length > 0 ? (
               selectedItems.map((item) => (
                 <View key={item.id} style={styles.itemRow}>
-                  <Text style={styles.itemType}>{item.type === 'task' ? 'Task' : 'Habit'}</Text>
-                  <Text style={styles.itemText}>{item.text}</Text>
+                  <Text style={styles.itemType}>{item.type === 'event' ? 'Event' : 'Habit'}</Text>
+                  <Text style={styles.itemText}>{item.title}</Text>
+                  {item.time ? <Text style={styles.itemMeta}>{item.time}</Text> : null}
+                  {item.location ? <Text style={styles.itemMeta}>{item.location}</Text> : null}
+                  {item.details ? <Text style={styles.itemMeta}>{item.details}</Text> : null}
                 </View>
               ))
             ) : (
-              <Text style={styles.emptyText}>No tasks or habits for this day.</Text>
+              <Text style={styles.emptyText}>No events or habits for this day.</Text>
             )}
           </View>
 
@@ -302,13 +317,13 @@ const styles = StyleSheet.create({
   habitDot: {
     backgroundColor: '#f59e0b',
   },
-  taskDot: {
+  eventDot: {
     backgroundColor: '#22c55e',
   },
   offsetHabitDot: {
     marginRight: 7,
   },
-  offsetTaskDot: {
+  offsetEventDot: {
     marginLeft: -5,
   },
   detailsCard: {
@@ -341,6 +356,11 @@ const styles = StyleSheet.create({
   itemText: {
     fontSize: 15,
     color: '#111827',
+  },
+  itemMeta: {
+    marginTop: 4,
+    color: '#4b5563',
+    fontSize: 13,
   },
   emptyText: {
     fontSize: 14,
