@@ -1,5 +1,13 @@
 import * as SQLite from 'expo-sqlite';
 
+import {
+  hashPassword,
+  isPasswordHash,
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  verifyPassword,
+} from './password-hashing';
+
 const db = SQLite.openDatabaseSync('productivity_app.db');
 
 export type TaskRecord = {
@@ -108,31 +116,70 @@ export async function initializeDatabase() {
     }
   }
 
-  await db.runAsync(
-    'INSERT OR IGNORE INTO users (username, password, is_logged_in) VALUES (?, ?, 0)',
-    ['user', 'password']
+  const users = await db.getAllAsync<UserRecord>(
+    'SELECT id, username, password, is_logged_in FROM users'
   );
+  for (const user of users) {
+    if (!isPasswordHash(user.password)) {
+      await db.runAsync('UPDATE users SET password = ? WHERE id = ?', [
+        await hashPassword(user.password),
+        user.id,
+      ]);
+    }
+  }
+}
+
+export async function createUser(username: string, password: string) {
+  const normalizedUsername = username.trim();
+  const passwordLength = Array.from(password).length;
+  if (
+    !normalizedUsername ||
+    passwordLength < MIN_PASSWORD_LENGTH ||
+    passwordLength > MAX_PASSWORD_LENGTH
+  ) {
+    return false;
+  }
+
+  const existingUser = await db.getFirstAsync<{ id: number }>(
+    'SELECT id FROM users WHERE username = ?',
+    [normalizedUsername]
+  );
+  if (existingUser) {
+    return false;
+  }
+
+  const passwordHash = await hashPassword(password);
+  const result = await db.runAsync(
+    'INSERT INTO users (username, password, is_logged_in) VALUES (?, ?, 0)',
+    [normalizedUsername, passwordHash]
+  );
+  await db.runAsync(
+    'UPDATE users SET is_logged_in = CASE WHEN id = ? THEN 1 ELSE 0 END',
+    [result.lastInsertRowId]
+  );
+  return true;
 }
 
 export async function validateUser(username: string, password: string) {
   const user = await db.getFirstAsync<UserRecord>(
-    'SELECT id, username, password, is_logged_in FROM users WHERE username = ? AND password = ?',
-    [username, password]
+    'SELECT id, username, password, is_logged_in FROM users WHERE username = ?',
+    [username.trim()]
   );
 
-  return !!user;
+  return user ? verifyPassword(password, user.password) : false;
 }
 
 export async function loginUser(username: string, password: string) {
-  const userExists = await validateUser(username, password);
-
-  if (!userExists) {
+  const user = await db.getFirstAsync<UserRecord>(
+    'SELECT id, username, password, is_logged_in FROM users WHERE username = ?',
+    [username.trim()]
+  );
+  if (!user || !(await verifyPassword(password, user.password))) {
     return false;
   }
 
-  await db.runAsync('UPDATE users SET is_logged_in = 1 WHERE username = ? AND password = ?', [
-    username,
-    password,
+  await db.runAsync('UPDATE users SET is_logged_in = CASE WHEN id = ? THEN 1 ELSE 0 END', [
+    user.id,
   ]);
 
   return true;

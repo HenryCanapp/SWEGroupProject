@@ -1,3 +1,11 @@
+import {
+  hashPassword,
+  isPasswordHash,
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  verifyPassword,
+} from './password-hashing';
+
 export type TaskRecord = {
   id: number;
   title: string;
@@ -162,12 +170,14 @@ function setProfiles(profiles: StoredProfile[]) {
 }
 
 export async function initializeDatabase() {
-  const users = getUsers();
-  if (!users.some((user) => user.username === 'user')) {
-    setUsers([
-      { id: 1, username: 'user', password: 'password', is_logged_in: 0 },
-      ...users,
-    ]);
+  const users = await Promise.all(
+    getUsers().map(async (user) => ({
+      ...user,
+      password: isPasswordHash(user.password) ? user.password : await hashPassword(user.password),
+    }))
+  );
+  if (users.length > 0) {
+    setUsers(users);
   }
 
   if (!localStorage.getItem(TASK_STORAGE_KEY)) {
@@ -179,22 +189,46 @@ export async function initializeDatabase() {
   }
 }
 
-export async function validateUser(username: string, password: string) {
+export async function createUser(username: string, password: string) {
+  const normalizedUsername = username.trim();
+  const passwordLength = Array.from(password).length;
+  if (
+    !normalizedUsername ||
+    passwordLength < MIN_PASSWORD_LENGTH ||
+    passwordLength > MAX_PASSWORD_LENGTH
+  ) {
+    return false;
+  }
+
   const users = getUsers();
-  return users.some((user) => user.username === username && user.password === password);
+  if (users.some((user) => user.username === normalizedUsername)) {
+    return false;
+  }
+
+  const passwordHash = await hashPassword(password);
+  const nextId = users.reduce((highestId, user) => Math.max(highestId, user.id), 0) + 1;
+  setUsers([
+    ...users.map((user) => ({ ...user, is_logged_in: 0 })),
+    { id: nextId, username: normalizedUsername, password: passwordHash, is_logged_in: 1 },
+  ]);
+  return true;
+}
+
+export async function validateUser(username: string, password: string) {
+  const user = getUsers().find((candidate) => candidate.username === username.trim());
+  return user ? verifyPassword(password, user.password) : false;
 }
 
 export async function loginUser(username: string, password: string) {
   const users = getUsers();
-
-  const foundUser = users.some((user) => user.username === username && user.password === password);
-  if (!foundUser) {
+  const foundUser = users.find((user) => user.username === username.trim());
+  if (!foundUser || !(await verifyPassword(password, foundUser.password))) {
     return false;
   }
 
   const nextUsers = users.map((user) => ({
     ...user,
-    is_logged_in: user.username === username && user.password === password ? 1 : 0,
+    is_logged_in: user.id === foundUser.id ? 1 : 0,
   }));
 
   setUsers(nextUsers);

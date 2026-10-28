@@ -17,6 +17,7 @@ export type ProfileInput = NativeDb.ProfileInput;
 const selectedDb = isWebPlatform ? WebDb : NativeDb;
 
 export const initializeDatabase = selectedDb.initializeDatabase;
+export const createUser = selectedDb.createUser;
 export const validateUser = selectedDb.validateUser;
 export const loginUser = selectedDb.loginUser;
 export const logoutUser = selectedDb.logoutUser;
