@@ -299,6 +299,19 @@ export async function updateEventHabit(id: number, input: EventHabitInput) {
   );
 }
 
+export async function deleteEventHabit(id: number) {
+  const user = getLoggedInUser();
+  if (!user) {
+    throw new Error('Cannot delete an event or habit without a logged-in user.');
+  }
+
+  setEventHabits(
+    getEventHabitsFromStorage().filter(
+      (record) => !(record.id === id && record.user_id === user.id)
+    )
+  );
+}
+
 export async function getEventHabits() {
   const user = getLoggedInUser();
   if (!user) {

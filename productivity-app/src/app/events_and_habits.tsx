@@ -1,6 +1,7 @@
 import { createElement, useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -22,6 +23,7 @@ import { BottomRibbon } from '@/components/bottom-ribbon';
 import { useEventHabitPageState } from '@/components/event-habit-state';
 import {
   addEventHabit,
+  deleteEventHabit,
   EventHabitInput,
   EventHabitRecord,
   EventHabitType,
@@ -35,7 +37,6 @@ const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 const recurrenceOptions = [
   { label: 'Weekly', value: 'weekly' },
   { label: 'Every other week', value: 'biweekly' },
-  { label: 'Monthly', value: 'monthly' },
 ];
 
 function parseDate(value: string) {
@@ -244,6 +245,12 @@ export default function EventsAndHabitsPage() {
 
   const toggleDay = (index: number) => {
     setDraft((current) => {
+      const [year, month, date] = current.date.split('-').map(Number);
+      const startDay =
+        year && month && date ? new Date(year, month - 1, date).getDay() : null;
+      if (index === startDay && current.selectedDays[index]) {
+        return current;
+      }
       const isSelecting = !current.selectedDays[index];
       return {
         ...current,
@@ -265,7 +272,34 @@ export default function EventsAndHabitsPage() {
   const selectAllDays = () => {
     setDraft((current) => {
       const allSelected = current.selectedDays.every(Boolean);
-      return { ...current, selectedDays: Array(7).fill(!allSelected) };
+      const selectedDays = Array(7).fill(!allSelected);
+      const [year, month, date] = current.date.split('-').map(Number);
+      if (year && month && date) {
+        selectedDays[new Date(year, month - 1, date).getDay()] = true;
+      }
+      return { ...current, selectedDays };
+    });
+  };
+
+  const updateDate = (date: string) => {
+    setDraft((current) => {
+      const [year, month, day] = date.split('-').map(Number);
+      if (!year || !month || !day) {
+        return { ...current, date };
+      }
+
+      const newStartDay = new Date(year, month - 1, day).getDay();
+      const [oldYear, oldMonth, oldDay] = current.date.split('-').map(Number);
+      const oldStartDay =
+        oldYear && oldMonth && oldDay
+          ? new Date(oldYear, oldMonth - 1, oldDay).getDay()
+          : null;
+      const selectedDays = [...current.selectedDays];
+      selectedDays[newStartDay] = true;
+      if (oldStartDay !== null && oldStartDay !== newStartDay && current.selectedDays.filter(Boolean).length === 1) {
+        selectedDays[oldStartDay] = false;
+      }
+      return { ...current, date, selectedDays };
     });
   };
 
@@ -325,6 +359,37 @@ export default function EventsAndHabitsPage() {
     }
   };
 
+  const remove = () => {
+    if (editingId === null) {
+      return;
+    }
+
+    const confirmed =
+      Platform.OS === 'web' ? window.confirm(`Delete "${draft.title}"?`) : undefined;
+    const performDelete = async () => {
+      try {
+        await deleteEventHabit(editingId);
+        await loadRecords();
+        closeEditorAndReset();
+      } catch (deleteError) {
+        console.error('Unable to delete event or habit:', deleteError);
+        setError('Unable to delete this item.');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (confirmed) {
+        void performDelete();
+      }
+      return;
+    }
+
+    Alert.alert('Delete item?', `Delete "${draft.title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => void performDelete() },
+    ]);
+  };
+
   return (
     <ScreenSwipe>
       <SafeAreaView style={styles.safeArea}>
@@ -335,11 +400,11 @@ export default function EventsAndHabitsPage() {
             onPress={() => openEditor()}
             style={styles.newButton}
           >
-            <Text style={styles.newButtonText}>New Event/Habbit</Text>
+            <Text style={styles.newButtonText}>New Event/Habit</Text>
           </Pressable>
 
           <View style={styles.listSection}>
-            <Text style={styles.sectionTitle}>Your Events &amp; Habbits</Text>
+            <Text style={styles.sectionTitle}>Your Events &amp; Habits</Text>
             <TextInput
               accessibilityLabel="Search events and habits"
               value={search}
@@ -352,7 +417,7 @@ export default function EventsAndHabitsPage() {
               {[
                 { label: 'All', value: 'all' as const },
                 { label: 'Events', value: 'event' as const },
-                { label: 'Habbits', value: 'habit' as const },
+                { label: 'Habits', value: 'habit' as const },
               ].map((option) => {
                 const isSelected = filter === option.value;
                 return (
@@ -381,7 +446,7 @@ export default function EventsAndHabitsPage() {
                   <View style={styles.recordCopy}>
                     <Text style={styles.recordTitle}>{item.title}</Text>
                     <Text style={styles.recordType}>
-                      {item.type === 'event' ? 'Event' : 'Habbit'} · {item.date}
+                      {item.type === 'event' ? 'Event' : 'Habit'} · {item.date}
                     </Text>
                     {item.location ? <Text style={styles.recordMeta}>{item.location}</Text> : null}
                   </View>
@@ -390,8 +455,8 @@ export default function EventsAndHabitsPage() {
               ListEmptyComponent={
                 <Text style={styles.emptyText}>
                   {search.trim() || filter !== 'all'
-                    ? 'No events or habbits match your search.'
-                    : 'You have not created any events or habbits yet.'}
+                    ? 'No events or habits match your search.'
+                    : 'You have not created any events or habits yet.'}
                 </Text>
               }
             />
@@ -417,7 +482,7 @@ export default function EventsAndHabitsPage() {
               contentContainerStyle={styles.editorContent}
             >
               <View style={styles.editorHeader}>
-                <Text style={styles.editorTitle}>{editingId === null ? 'New' : 'Edit'} Event/Habbit</Text>
+                <Text style={styles.editorTitle}>{editingId === null ? 'New' : 'Edit'} Event/Habit</Text>
                 <Pressable onPress={closeEditorAndReset} accessibilityLabel="Close editor">
                   <Text style={styles.closeText}>×</Text>
                 </Pressable>
@@ -440,7 +505,7 @@ export default function EventsAndHabitsPage() {
                 placeholder="Date"
                 invalid={requiredFieldsInvalid && !draft.date}
                 onChange={(date) => {
-                  updateDraft({ date });
+                  updateDate(date);
                   if (date && draft.title.trim()) {
                     setRequiredFieldsInvalid(false);
                   }
@@ -467,7 +532,7 @@ export default function EventsAndHabitsPage() {
                     style={[styles.modeButton, draft.type === type && styles.selectedModeButton]}
                   >
                     <Text style={draft.type === type ? styles.selectedFilterText : styles.filterText}>
-                      {type === 'event' ? 'Event' : 'Habbit'}
+                      {type === 'event' ? 'Event' : 'Habit'}
                     </Text>
                   </Pressable>
                 ))}
@@ -559,12 +624,17 @@ export default function EventsAndHabitsPage() {
               {requiredFieldsInvalid ? (
                 <Text style={styles.requiredErrorText}>Name and date are required.</Text>
               ) : null}
+              {editingId !== null ? (
+                <Pressable onPress={remove} style={styles.deleteButton}>
+                  <Text style={styles.deleteButtonText}>Delete</Text>
+                </Pressable>
+              ) : null}
               <View style={styles.saveRow}>
                 <Pressable onPress={save} style={styles.saveButton}>
                   <Text style={styles.saveButtonText}>Save</Text>
                 </Pressable>
                 <View>
-                  <Text style={styles.fieldLabel}>Importance</Text>
+                  <Text style={styles.fieldLabel}>Priority</Text>
                   <View style={styles.importanceButtons}>
                     {[1, 2, 3, 4, 5].map((value) => (
                       <Pressable
@@ -694,6 +764,8 @@ const styles = StyleSheet.create({
   saveRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 },
   saveButton: { flex: 1, backgroundColor: '#111827', borderRadius: 8, alignItems: 'center', paddingVertical: 12 },
   saveButtonText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
+  deleteButton: { borderRadius: 8, alignItems: 'center', paddingVertical: 12, marginTop: 16, borderWidth: 1, borderColor: '#b91c1c' },
+  deleteButtonText: { color: '#b91c1c', fontWeight: '700', fontSize: 16 },
   importanceButtons: { flexDirection: 'row', gap: 4 },
   importanceButton: { width: 28, height: 28, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
   requiredErrorText: { color: '#b91c1c', marginBottom: 8, fontSize: 13, fontWeight: '600' },

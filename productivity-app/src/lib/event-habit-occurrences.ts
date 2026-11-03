@@ -61,15 +61,13 @@ function occursOnDate(record: EventHabitRecord, startDate: Date, date: Date) {
     return formatDate(date) === record.date;
   }
 
-  if (record.recurrence === 'monthly') {
-    return date.getDate() === startDate.getDate();
-  }
-
   if (record.recurrence === 'biweekly') {
     const dateNumber = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000;
-    const startNumber =
-      Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()) / 86400000;
-    const elapsedWeeks = Math.floor((dateNumber - startNumber) / 7);
+    const weekStartNumber = dateNumber - date.getDay();
+    const startWeekStartNumber =
+      Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()) / 86400000 -
+      startDate.getDay();
+    const elapsedWeeks = Math.floor((weekStartNumber - startWeekStartNumber) / 7);
     return elapsedWeeks % 2 === 0 && getSelectedDays(record)[date.getDay()];
   }
 

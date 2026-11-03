@@ -27,6 +27,7 @@ export const getTasks = selectedDb.getTasks;
 export const getTaskCount = selectedDb.getTaskCount;
 export const addEventHabit = selectedDb.addEventHabit;
 export const updateEventHabit = selectedDb.updateEventHabit;
+export const deleteEventHabit = selectedDb.deleteEventHabit;
 export const getEventHabits = selectedDb.getEventHabits;
 export const getCurrentUser = selectedDb.getCurrentUser;
 export const getProfile = selectedDb.getProfile;

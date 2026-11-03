@@ -16,19 +16,34 @@ export type EventHabitDraft = {
   dayTimeOverrides: Record<number, boolean>;
 };
 
-const createDraft = (): EventHabitDraft => ({
-  title: '',
-  type: 'event',
-  date: new Date().toISOString().slice(0, 10),
-  time: '',
-  location: '',
-  details: '',
-  importance: 3,
-  recurrence: 'weekly',
-  selectedDays: Array(7).fill(true),
-  dayTimes: {},
-  dayTimeOverrides: {},
-});
+function getDateDay(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return year && month && day ? new Date(year, month - 1, day).getDay() : null;
+}
+
+const createDraft = (): EventHabitDraft => {
+  const date = new Date();
+  const dateValue = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+  const startDay = date.getDay();
+
+  return {
+    title: '',
+    type: 'event',
+    date: dateValue,
+    time: '',
+    location: '',
+    details: '',
+    importance: 3,
+    recurrence: 'weekly',
+    selectedDays: Array.from({ length: 7 }, (_, index) => index === startDay),
+    dayTimes: {},
+    dayTimeOverrides: {},
+  };
+};
 
 type EventHabitPageState = {
   search: string;
@@ -56,6 +71,11 @@ function recordToDraft(record: EventHabitRecord): EventHabitDraft {
     }
   } catch {
     console.error('Unable to read habit days:', record.id);
+  }
+
+  const startDay = getDateDay(record.date);
+  if (startDay !== null) {
+    selectedDays[startDay] = true;
   }
 
   try {

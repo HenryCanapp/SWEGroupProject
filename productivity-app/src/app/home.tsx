@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { type Href, router, useFocusEffect } from 'expo-router';
 
 import { BottomRibbon } from '@/components/bottom-ribbon';
+import { useEventHabitPageState } from '@/components/event-habit-state';
 import { ScreenSwipe } from '@/components/screen-swipe';
 import { getEventHabits, isUserLoggedIn } from '@/lib/database';
 import type { EventHabitRecord } from '@/lib/database';
@@ -11,6 +12,7 @@ import { getEventHabitOccurrences } from '@/lib/event-habit-occurrences';
 import type { EventHabitOccurrence } from '@/lib/event-habit-occurrences';
 
 export default function HomePage() {
+  const { openEditor } = useEventHabitPageState();
   const [records, setRecords] = useState<EventHabitRecord[]>([]);
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [loadError, setLoadError] = useState('');
@@ -100,7 +102,10 @@ export default function HomePage() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Go to Events + Habits"
-              onPress={() => router.push('/events_and_habits' as Href)}
+              onPress={() => {
+                openEditor();
+                router.push('/events_and_habits' as Href);
+              }}
               style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
             >
               <Text style={styles.addIcon}>+</Text>

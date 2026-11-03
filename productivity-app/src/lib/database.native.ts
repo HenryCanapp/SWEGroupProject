@@ -278,6 +278,18 @@ export async function updateEventHabit(id: number, input: EventHabitInput) {
   );
 }
 
+export async function deleteEventHabit(id: number) {
+  const user = await db.getFirstAsync<{ id: number }>(
+    'SELECT id FROM users WHERE is_logged_in = 1 LIMIT 1'
+  );
+
+  if (!user) {
+    throw new Error('Cannot delete an event or habit without a logged-in user.');
+  }
+
+  await db.runAsync('DELETE FROM events_habits WHERE id = ? AND user_id = ?', [id, user.id]);
+}
+
 export async function getEventHabits() {
   return db.getAllAsync<EventHabitRecord>(
     `SELECT id, user_id, title, type, date, time, location, details, importance,
