@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
@@ -8,15 +8,41 @@ import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from '@/lib/password-hashing
 
 export default function LoginScreen() {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [confirmationModalVisible, setConfirmationModalVisible] = useState(false);
   const [error, setError] = useState('');
   const [databaseReady, setDatabaseReady] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const emailRef = useRef<TextInput | null>(null);
   const usernameRef = useRef<TextInput | null>(null);
   const passwordRef = useRef<TextInput | null>(null);
   const confirmPasswordRef = useRef<TextInput | null>(null);
+  const [screenOpacity] = useState(() => new Animated.Value(1));
+
+  const transitionToHome = () =>
+    new Promise<void>((resolve) => {
+      Animated.timing(screenOpacity, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: Platform.OS !== 'web',
+      }).start(({ finished }) => {
+        if (finished) {
+          router.replace({ pathname: '/home', params: { fadeIn: 'true' } });
+        }
+        resolve();
+      });
+    });
+
+  const closeConfirmationModal = () => {
+    setConfirmationModalVisible(false);
+    setMode('login');
+    setPassword('');
+    setConfirmPassword('');
+    setError('');
+  };
 
   useEffect(() => {
     let isActive = true;
@@ -35,7 +61,7 @@ export default function LoginScreen() {
       .catch((error) => {
         console.error('Database initialization failed:', error);
         if (isActive) {
-          setError('Unable to initialize account storage.');
+          setError(error instanceof Error ? error.message : 'Unable to initialize account storage.');
         }
       });
     return () => {
@@ -48,9 +74,16 @@ export default function LoginScreen() {
       return;
     }
 
-    const trimmedUsername = username.trim();
-    if (!trimmedUsername) {
-      setError('Enter a username.');
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail) {
+      setError('Enter your email address.');
+      emailRef.current?.focus();
+      return;
+    }
+
+    const trimmedUsername = username.trim().toLowerCase();
+    if (mode === 'signup' && !trimmedUsername) {
+      setError('Choose a username.');
       usernameRef.current?.focus();
       return;
     }
@@ -71,35 +104,51 @@ export default function LoginScreen() {
     setIsSubmitting(true);
     try {
       if (mode === 'signup') {
-        const created = await createUser(trimmedUsername, password);
+        const created = await createUser(trimmedUsername, trimmedEmail, password);
         if (created) {
-          router.replace('/home');
+          await transitionToHome();
           return;
         }
-        setError('That username is already in use.');
-        usernameRef.current?.focus();
+        setError('');
+        setPassword('');
+        setConfirmationModalVisible(true);
       } else {
-        const isValid = await loginUser(trimmedUsername, password);
+        const isValid = await loginUser(trimmedEmail, password);
         if (isValid) {
-          router.replace('/home');
+          await transitionToHome();
           return;
         }
         setPassword('');
-        setError('Unsuccessful login: username or password incorrect.');
-        usernameRef.current?.focus();
+        setError('Unsuccessful login: email or password incorrect.');
+        emailRef.current?.focus();
       }
     } catch (submitError) {
       console.error('Account submission failed:', submitError);
-      setError('Unable to access your account. Try again.');
+      const isEmailRateLimited =
+        submitError instanceof Error && /email rate limit exceeded|too many requests/i.test(submitError.message);
+      const isInvalidEmail =
+        submitError instanceof Error &&
+        /email address .* is invalid|invalid email/i.test(submitError.message);
+      setError(
+        isEmailRateLimited
+          ? 'Confirmation emails are temporarily rate-limited. Wait before retrying, or configure custom SMTP in Supabase.'
+          : isInvalidEmail
+            ? 'Supabase rejected this email address. Check it and try another.'
+            : 'Unable to access your account. Try again.'
+      );
+      if (isInvalidEmail) {
+        emailRef.current?.focus();
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.card}>
-        <Text style={styles.title}>{mode === 'login' ? 'Login' : 'Create account'}</Text>
+    <Animated.View style={{ flex: 1, opacity: screenOpacity }}>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.card}>
+          <Text style={styles.title}>{mode === 'login' ? 'Login' : 'Create account'}</Text>
 
         <View style={styles.modeButtons} accessibilityRole="tablist">
           {([
@@ -128,22 +177,45 @@ export default function LoginScreen() {
         </View>
 
         <TextInput
-          ref={usernameRef}
-          value={username}
+          ref={emailRef}
+          value={email}
           onChangeText={(value) => {
-            setUsername(value);
+            setEmail(value);
             if (error) {
               setError('');
             }
           }}
-          placeholder="Username"
-          accessibilityLabel="Username"
+          placeholder="Email address"
+          accessibilityLabel="Email address"
+          keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="next"
-          onSubmitEditing={() => passwordRef.current?.focus()}
+          onSubmitEditing={() =>
+            mode === 'signup' ? usernameRef.current?.focus() : passwordRef.current?.focus()
+          }
           style={styles.input}
         />
+
+        {mode === 'signup' ? (
+          <TextInput
+            ref={usernameRef}
+            value={username}
+            onChangeText={(value) => {
+              setUsername(value);
+              if (error) {
+                setError('');
+              }
+            }}
+            placeholder="Username"
+            accessibilityLabel="Username"
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="next"
+            onSubmitEditing={() => passwordRef.current?.focus()}
+            style={styles.input}
+          />
+        ) : null}
 
         <TextInput
           ref={passwordRef}
@@ -204,9 +276,33 @@ export default function LoginScreen() {
           </Text>
         </Pressable>
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-      </View>
-    </SafeAreaView>
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        </View>
+      </SafeAreaView>
+
+      <Modal
+        visible={confirmationModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeConfirmationModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmationDialog}>
+            <Text style={styles.confirmationTitle}>Check your email</Text>
+            <Text style={styles.confirmationMessage}>
+              We sent a confirmation link to {email.trim()}. Confirm your email address, then log in.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={closeConfirmationModal}
+              style={styles.confirmationButton}
+            >
+              <Text style={styles.confirmationButtonText}>Continue to login</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </Animated.View>
   );
 }
 
@@ -293,5 +389,48 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: 'rgba(17, 24, 39, 0.48)',
+  },
+  confirmationDialog: {
+    width: '100%',
+    maxWidth: 360,
+    padding: 24,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    shadowColor: '#000000',
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  confirmationTitle: {
+    color: '#111827',
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  confirmationMessage: {
+    color: '#374151',
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  confirmationButton: {
+    alignItems: 'center',
+    backgroundColor: '#111827',
+    borderRadius: 8,
+    marginTop: 20,
+    paddingVertical: 12,
+  },
+  confirmationButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

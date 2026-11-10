@@ -33,7 +33,6 @@
           "imageWidth": 76
         }
       ],
-      "expo-sqlite",
       "@react-native-community/datetimepicker"
     ],
     "experiments": {

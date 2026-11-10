@@ -25,6 +25,15 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## Supabase setup
+
+1. Create a Supabase project.
+2. Run [`supabase/schema.sql`](supabase/schema.sql) in the project's SQL Editor. It creates the profile, task, and events/habits tables, signup profile trigger, and row-level security policies.
+3. Copy `.env.example` to `.env.local` and set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_KEY` from the project's API settings. A publishable key or legacy anon key is appropriate; never put a secret or service-role key in the app.
+4. Restart Expo with `npx expo start -c` so it loads the new environment values.
+
+Signup uses email and password, with a username handle for the profile. If email confirmation is enabled in Supabase Auth, users must confirm their address before logging in. Existing SQLite and browser-local data is not migrated.
+
 ## Get a fresh project
 
 When you're ready, run:
