@@ -28,11 +28,13 @@ You can start developing by editing the files inside the **app** directory. This
 ## Supabase setup
 
 1. Create a Supabase project.
-2. Run [`supabase/schema.sql`](supabase/schema.sql) in the project's SQL Editor. It creates the profile, task, and events/habits tables, signup profile trigger, and row-level security policies.
+2. Run [`supabase/schema.sql`](supabase/schema.sql) in the project's SQL Editor. It creates the profile, task, events/habits, friend-request, and notification tables, plus their policies and functions.
 3. Copy `.env.example` to `.env.local` and set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_KEY` from the project's API settings. A publishable key or legacy anon key is appropriate; never put a secret or service-role key in the app.
 4. Restart Expo with `npx expo start -c` so it loads the new environment values.
 
 Signup uses email and password, with a username handle for the profile. If email confirmation is enabled in Supabase Auth, users must confirm their address before logging in. Existing SQLite and browser-local data is not migrated.
+
+Friend requests, accepted friendships, and notifications are stored in Supabase. The social leaderboard displays up to 10 accepted friends by default; its scores are temporary placeholders, not task-derived points. Re-run the schema after app updates that add database functions or tables.
 
 ## Get a fresh project
 
