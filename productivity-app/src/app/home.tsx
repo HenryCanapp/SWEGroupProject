@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Animated, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { type Href, router, useFocusEffect } from 'expo-router';
+import { type Href, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { BottomRibbon } from '@/components/bottom-ribbon';
 import { ScreenSwipe } from '@/components/screen-swipe';
@@ -14,6 +14,22 @@ export default function HomePage() {
   const [records, setRecords] = useState<EventHabitRecord[]>([]);
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [loadError, setLoadError] = useState('');
+  const { fadeIn } = useLocalSearchParams<{ fadeIn?: string }>();
+  const [screenOpacity] = useState(() => new Animated.Value(fadeIn === 'true' ? 0 : 1));
+
+  useEffect(() => {
+    if (fadeIn !== 'true') {
+      return;
+    }
+
+    const animation = Animated.timing(screenOpacity, {
+      toValue: 1,
+      duration: 320,
+      useNativeDriver: Platform.OS !== 'web',
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [fadeIn, screenOpacity]);
 
   useFocusEffect(
     useCallback(() => {
@@ -57,9 +73,10 @@ export default function HomePage() {
   const upcomingItems = occurrences.filter((item) => item.date > todayKey);
 
   return (
-    <ScreenSwipe>
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.container}>
+    <Animated.View style={{ flex: 1, opacity: screenOpacity }}>
+      <ScreenSwipe>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.container}>
           <ScrollView
             contentContainerStyle={styles.content}
             showsVerticalScrollIndicator={false}
@@ -107,9 +124,10 @@ export default function HomePage() {
             </Pressable>
           </ScrollView>
           <BottomRibbon />
-        </View>
-      </SafeAreaView>
-    </ScreenSwipe>
+          </View>
+        </SafeAreaView>
+      </ScreenSwipe>
+    </Animated.View>
   );
 }
 
