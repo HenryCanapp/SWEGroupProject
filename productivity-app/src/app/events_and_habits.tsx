@@ -339,7 +339,7 @@ export default function EventsAndHabitsPage() {
           </Pressable>
 
           <View style={styles.listSection}>
-            <Text style={styles.sectionTitle}>Your Events &amp; Habbits</Text>
+            <Text style={styles.sectionTitle}>Your Events &amp; Habits</Text>
             <TextInput
               accessibilityLabel="Search events and habits"
               value={search}
@@ -352,7 +352,7 @@ export default function EventsAndHabitsPage() {
               {[
                 { label: 'All', value: 'all' as const },
                 { label: 'Events', value: 'event' as const },
-                { label: 'Habbits', value: 'habit' as const },
+                { label: 'Habits', value: 'habit' as const },
               ].map((option) => {
                 const isSelected = filter === option.value;
                 return (
@@ -390,8 +390,8 @@ export default function EventsAndHabitsPage() {
               ListEmptyComponent={
                 <Text style={styles.emptyText}>
                   {search.trim() || filter !== 'all'
-                    ? 'No events or habbits match your search.'
-                    : 'You have not created any events or habbits yet.'}
+                    ? 'No events or habits match your search.'
+                    : 'You have not created any events or habits yet.'}
                 </Text>
               }
             />
