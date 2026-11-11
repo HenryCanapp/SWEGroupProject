@@ -252,3 +252,70 @@ export async function saveProfile(input: ProfileInput) {
   );
   checkError(error);
 }
+
+export type EventHabitCompletion = {
+  event_habit_id: number;
+  occurrence_date: string;
+  dismissed: boolean;
+};
+
+export async function getEventHabitCompletions(): Promise<EventHabitCompletion[]> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('event_habit_completions')
+    .select('event_habit_id, occurrence_date, dismissed')
+    .eq('user_id', user.id);
+  checkError(error);
+  return data ?? [];
+}
+
+export async function markEventHabitCompleteMany(eventHabitId: number, occurrenceDates: string[]) {
+  if (!occurrenceDates.length) {
+    return;
+  }
+
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error('Cannot complete an event or habit without a logged-in user.');
+  }
+
+  const { error } = await supabase.from('event_habit_completions').upsert(
+    occurrenceDates.map((occurrenceDate) => ({
+      user_id: user.id,
+      event_habit_id: eventHabitId,
+      occurrence_date: occurrenceDate,
+    })),
+    { onConflict: 'event_habit_id,occurrence_date', ignoreDuplicates: true }
+  );
+  checkError(error);
+}
+
+export async function dismissEventHabitCompletions(
+  eventHabitId: number,
+  occurrenceDates: string[]
+) {
+  if (!occurrenceDates.length) {
+    return;
+  }
+
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error('Cannot remove a completed item without a logged-in user.');
+  }
+
+  const { error } = await supabase
+    .from('event_habit_completions')
+    .update({ dismissed: true })
+    .eq('user_id', user.id)
+    .eq('event_habit_id', eventHabitId)
+    .in('occurrence_date', occurrenceDates);
+  checkError(error);
+}
+
+export async function markEventHabitComplete(eventHabitId: number, occurrenceDate: string) {
+  await markEventHabitCompleteMany(eventHabitId, [occurrenceDate]);
+}

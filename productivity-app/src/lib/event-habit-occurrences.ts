@@ -110,3 +110,130 @@ export function getEventHabitOccurrences(
     first.date.localeCompare(second.date) || first.time.localeCompare(second.time)
   );
 }
+
+export type OverdueItem =
+  | { kind: 'event'; occurrence: EventHabitOccurrence }
+  | { kind: 'habit'; occurrence: EventHabitOccurrence; missedDates: string[] };
+
+export function occurrenceKey(eventHabitId: number, date: string) {
+  return `${eventHabitId}-${date}`;
+}
+
+function timeToMinutes(value: string) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value);
+  if (!match) {
+    return null;
+  }
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+export function isOccurrencePastDue(occurrence: EventHabitOccurrence, now: Date) {
+  const todayKey = formatDate(now);
+  if (occurrence.date < todayKey) {
+    return true;
+  }
+  if (occurrence.date > todayKey) {
+    return false;
+  }
+
+  const minutes = timeToMinutes(occurrence.time);
+  return minutes !== null && minutes <= now.getHours() * 60 + now.getMinutes();
+}
+
+export function getOverdueItems(
+  records: EventHabitRecord[],
+  completedKeys: Set<string>,
+  now: Date
+): OverdueItem[] {
+  const items: OverdueItem[] = [];
+
+  for (const record of records) {
+    const recordStart = parseDate(record.date);
+    if (!recordStart || recordStart > now) {
+      continue;
+    }
+
+    const missed = getEventHabitOccurrences([record], recordStart, now).filter(
+      (occurrence) =>
+        isOccurrencePastDue(occurrence, now) &&
+        !completedKeys.has(occurrenceKey(occurrence.id, occurrence.date))
+    );
+    if (!missed.length) {
+      continue;
+    }
+
+    if (record.type === 'event') {
+      missed.forEach((occurrence) => items.push({ kind: 'event', occurrence }));
+    } else {
+      items.push({
+        kind: 'habit',
+        occurrence: missed[missed.length - 1],
+        missedDates: missed.map((occurrence) => occurrence.date),
+      });
+    }
+  }
+
+  return items.sort(
+    (first, second) =>
+      first.occurrence.date.localeCompare(second.occurrence.date) ||
+      first.occurrence.time.localeCompare(second.occurrence.time)
+  );
+}
+
+
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+function ordinal(value: number) {
+  const remainder = value % 100;
+  if (remainder >= 11 && remainder <= 13) {
+    return `${value}th`;
+  }
+  const suffix = ['th', 'st', 'nd', 'rd'][value % 10] ?? 'th';
+  return `${value}${suffix}`;
+}
+
+export function describeHabitSchedule(record: EventHabitRecord) {
+  if (record.recurrence === 'monthly') {
+    const start = parseDate(record.date);
+    const base = start ? `Monthly on the ${ordinal(start.getDate())}` : 'Monthly';
+    return record.time ? `${base} · ${record.time}` : base;
+  }
+
+  const selected = getSelectedDays(record);
+  const days = WEEK_ORDER.filter((day) => selected[day]);
+  if (!days.length) {
+    return 'No days selected';
+  }
+
+  const times = days.map((day) => getDayTime(record, day));
+  const sharedTime = times.every((time) => time === times[0]) ? times[0] : null;
+  const prefix = record.recurrence === 'biweekly' ? 'Every other week: ' : 'Every ';
+
+  if (sharedTime !== null) {
+    const dayText =
+      days.length === 7 && record.recurrence !== 'biweekly'
+        ? 'Every day'
+        : `${prefix}${days.map((day) => DAY_LABELS[day]).join(', ')}`;
+    return sharedTime ? `${dayText} · ${sharedTime}` : dayText;
+  }
+
+  const perDay = days
+    .map((day, index) => (times[index] ? `${DAY_LABELS[day]} ${times[index]}` : DAY_LABELS[day]))
+    .join(', ');
+  return `${prefix}${perDay}`;
+}
+
+export function groupHabitOccurrences(items: EventHabitOccurrence[]) {
+  const seenHabits = new Set<number>();
+  return items.filter((item) => {
+    if (item.type !== 'habit') {
+      return true;
+    }
+    if (seenHabits.has(item.id)) {
+      return false;
+    }
+    seenHabits.add(item.id);
+    return true;
+  });
+}
