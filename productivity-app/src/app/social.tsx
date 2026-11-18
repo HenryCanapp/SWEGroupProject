@@ -26,22 +26,10 @@ import {
   type SearchableProfileRecord,
 } from '@/lib/database';
 
-type LeaderboardFriend = FriendRecord & {
-  temporaryPoints: number;
-};
-
 const FRIENDS_LIMIT = 10;
 
-function getTemporaryPoints(userId: string) {
-  let score = 0;
-  for (const character of userId) {
-    score = (score * 31 + character.charCodeAt(0)) % 1700;
-  }
-  return score + 100;
-}
-
 export default function SocialPage() {
-  const [friends, setFriends] = useState<LeaderboardFriend[]>([]);
+  const [friends, setFriends] = useState<FriendRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [isAddFriendVisible, setIsAddFriendVisible] = useState(false);
@@ -71,12 +59,7 @@ export default function SocialPage() {
           const profiles = await getFriends();
 
           if (isActive) {
-            setFriends(
-              profiles.map((profile) => ({
-                ...profile,
-                temporaryPoints: getTemporaryPoints(profile.user_id),
-              }))
-            );
+            setFriends(profiles);
             setLoadError('');
           }
         } catch (error) {
@@ -102,11 +85,12 @@ export default function SocialPage() {
     () =>
       [...friends].sort(
         (first, second) =>
-          second.temporaryPoints - first.temporaryPoints ||
+          second.points - first.points ||
           first.username.localeCompare(second.username)
       ),
     [friends]
   );
+  const friendCount = friends.filter((friend) => !friend.is_self).length;
   const visibleFriends = showAllFriends
     ? sortedFriends
     : sortedFriends.slice(0, FRIENDS_LIMIT);
@@ -163,7 +147,7 @@ export default function SocialPage() {
     }
   };
 
-  const handleUnfriend = async (friend: LeaderboardFriend) => {
+  const handleUnfriend = async (friend: FriendRecord) => {
     setLoadError('');
     try {
       await removeFriend(friend.user_id);
@@ -194,11 +178,8 @@ export default function SocialPage() {
                 <View>
                   <Text style={styles.sectionTitle}>Leaderboard</Text>
                   <Text style={styles.friendCount}>
-                    {friends.length} {friends.length === 1 ? 'friend' : 'friends'}
+                    {friendCount} {friendCount === 1 ? 'friend' : 'friends'}
                   </Text>
-                </View>
-                <View style={styles.temporaryBadge}>
-                  <Text style={styles.temporaryBadgeText}>TEMP SCORES</Text>
                 </View>
               </View>
 
@@ -210,14 +191,19 @@ export default function SocialPage() {
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyTitle}>Your leaderboard starts here</Text>
                   <Text style={styles.emptyText}>
-                    Add a friend to see them here. Points are placeholders for now.
+                    Add a friend to see their points here. Complete scheduled items to earn points.
                   </Text>
                 </View>
               ) : (
                 <>
                   {visibleFriends.map((friend, index) => (
                     <View key={friend.user_id}>
-                      <View style={styles.friendRow}>
+                      <View
+                        style={[
+                          styles.friendRow,
+                          friend.is_self && styles.currentUserRow,
+                        ]}
+                      >
                         <Text style={styles.rank}>{index + 1}</Text>
                         <ProfileAvatar
                           uri={friend.avatar_uri}
@@ -225,8 +211,15 @@ export default function SocialPage() {
                           size={44}
                         />
                         <View style={styles.friendInfo}>
-                          <Text style={styles.displayName} numberOfLines={1}>
+                          <Text
+                            style={[
+                              styles.displayName,
+                              friend.is_self && styles.currentUserName,
+                            ]}
+                            numberOfLines={1}
+                          >
                             {friend.display_name || friend.username}
+                            {friend.is_self ? ' (You)' : ''}
                           </Text>
                           <Text style={styles.username} numberOfLines={1}>
                             @{friend.username}
@@ -234,23 +227,25 @@ export default function SocialPage() {
                         </View>
                         <View style={styles.pointsBlock}>
                           <Text style={styles.points}>
-                            {friend.temporaryPoints.toLocaleString()}
+                            {friend.points.toLocaleString()}
                           </Text>
                           <Text style={styles.pointsLabel}>points</Text>
                         </View>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`More options for ${friend.display_name || friend.username}`}
-                          accessibilityState={{ expanded: openFriendMenuId === friend.user_id }}
-                          onPress={() =>
-                            setOpenFriendMenuId((openId) =>
-                              openId === friend.user_id ? '' : friend.user_id
-                            )
-                          }
-                          style={styles.moreButton}
-                        >
-                          <Text style={styles.moreButtonText}>•••</Text>
-                        </Pressable>
+                        {!friend.is_self ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`More options for ${friend.display_name || friend.username}`}
+                            accessibilityState={{ expanded: openFriendMenuId === friend.user_id }}
+                            onPress={() =>
+                              setOpenFriendMenuId((openId) =>
+                                openId === friend.user_id ? '' : friend.user_id
+                              )
+                            }
+                            style={styles.moreButton}
+                          >
+                            <Text style={styles.moreButtonText}>•••</Text>
+                          </Pressable>
+                        ) : null}
                       </View>
                       {openFriendMenuId === friend.user_id ? (
                         <View style={styles.friendMenu}>
@@ -470,18 +465,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 3,
   },
-  temporaryBadge: {
-    backgroundColor: '#fff7ed',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  temporaryBadgeText: {
-    color: '#c2410c',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
   emptyState: {
     alignItems: 'center',
     paddingHorizontal: 12,
@@ -515,6 +498,13 @@ const styles = StyleSheet.create({
     borderTopColor: '#e5e7eb',
     gap: 12,
   },
+  currentUserRow: {
+    backgroundColor: '#ecfdf3',
+    borderRadius: 12,
+    borderTopWidth: 0,
+    marginVertical: 4,
+    paddingHorizontal: 10,
+  },
   rank: {
     width: 18,
     color: '#6b7280',
@@ -530,6 +520,9 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontSize: 15,
     fontWeight: '600',
+  },
+  currentUserName: {
+    color: '#166534',
   },
   username: {
     color: '#6b7280',

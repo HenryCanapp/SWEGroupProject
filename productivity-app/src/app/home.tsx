@@ -17,7 +17,9 @@ import { ProfileAvatar } from '@/components/profile-avatar';
 import { ScreenSwipe } from '@/components/screen-swipe';
 import {
   getEventHabits,
+  getEventHabitCompletions,
   getFriendNotifications,
+  completeEventHabitOccurrence,
   isUserLoggedIn,
   respondToFriendRequest,
   type EventHabitRecord,
@@ -25,11 +27,15 @@ import {
 } from '@/lib/database';
 import { getEventHabitOccurrences } from '@/lib/event-habit-occurrences';
 import type { EventHabitOccurrence } from '@/lib/event-habit-occurrences';
+import { IMPORTANCE_POINTS } from '@/lib/points';
 
 export default function HomePage() {
   const [records, setRecords] = useState<EventHabitRecord[]>([]);
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [loadError, setLoadError] = useState('');
+  const [completionError, setCompletionError] = useState('');
+  const [completionPoints, setCompletionPoints] = useState<Record<string, number>>({});
+  const [pendingCompletions, setPendingCompletions] = useState<Record<string, boolean>>({});
   const [notifications, setNotifications] = useState<FriendNotification[]>([]);
   const [notificationsVisible, setNotificationsVisible] = useState(false);
   const [notificationError, setNotificationError] = useState('');
@@ -72,11 +78,26 @@ export default function HomePage() {
           return;
         }
 
-        const eventHabits = await getEventHabits();
+        const today = new Date();
+        const todayKey = formatDate(today);
+        const endKey = formatDate(addDays(today, 7));
+        const [eventHabits, completions] = await Promise.all([
+          getEventHabits(),
+          getEventHabitCompletions(todayKey, endKey),
+        ]);
         if (isActive) {
           setRecords(eventHabits);
-          setCurrentDate(new Date());
+          setCompletionPoints(
+            Object.fromEntries(
+              completions.map((completion) => [
+                `${completion.event_habit_id}-${completion.occurrence_date}`,
+                completion.points_awarded,
+              ])
+            )
+          );
+          setCurrentDate(today);
           setLoadError('');
+          setCompletionError('');
         }
       };
 
@@ -122,6 +143,29 @@ export default function HomePage() {
     }
   };
 
+  const handleCompleteOccurrence = async (item: EventHabitOccurrence) => {
+    const key = `${item.id}-${item.date}`;
+    if (completionPoints[key] !== undefined || pendingCompletions[key]) {
+      return;
+    }
+
+    setPendingCompletions((current) => ({ ...current, [key]: true }));
+    setCompletionError('');
+    try {
+      const pointsAwarded = await completeEventHabitOccurrence(item.id, item.date);
+      setCompletionPoints((current) => ({ ...current, [key]: pointsAwarded }));
+    } catch (error) {
+      console.error('Unable to complete scheduled item:', error);
+      setCompletionError('Unable to complete this item. Please try again.');
+    } finally {
+      setPendingCompletions((current) => {
+        const remaining = { ...current };
+        delete remaining[key];
+        return remaining;
+      });
+    }
+  };
+
   return (
     <Animated.View style={{ flex: 1, opacity: screenOpacity }}>
       <ScreenSwipe>
@@ -157,12 +201,19 @@ export default function HomePage() {
             </View>
 
             {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
+            {completionError ? <Text style={styles.errorText}>{completionError}</Text> : null}
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Today</Text>
               {todayItems.length ? (
                 todayItems.map((item) => (
-                  <ScheduledItem key={`${item.id}-${item.date}`} item={item} />
+                  <ScheduledItem
+                    key={`${item.id}-${item.date}`}
+                    item={item}
+                    pointsAwarded={completionPoints[`${item.id}-${item.date}`]}
+                    isCompleting={Boolean(pendingCompletions[`${item.id}-${item.date}`])}
+                    onComplete={() => void handleCompleteOccurrence(item)}
+                  />
                 ))
               ) : (
                 <Text style={styles.emptyText}>Nothing scheduled for today.</Text>
@@ -173,7 +224,13 @@ export default function HomePage() {
               <Text style={styles.sectionTitle}>Upcoming</Text>
               {upcomingItems.length ? (
                 upcomingItems.map((item) => (
-                  <ScheduledItem key={`${item.id}-${item.date}`} item={item} />
+                  <ScheduledItem
+                    key={`${item.id}-${item.date}`}
+                    item={item}
+                    pointsAwarded={completionPoints[`${item.id}-${item.date}`]}
+                    isCompleting={Boolean(pendingCompletions[`${item.id}-${item.date}`])}
+                    onComplete={() => void handleCompleteOccurrence(item)}
+                  />
                 ))
               ) : (
                 <Text style={styles.emptyText}>Nothing else scheduled this week.</Text>
@@ -295,7 +352,20 @@ export default function HomePage() {
   );
 }
 
-function ScheduledItem({ item }: { item: EventHabitOccurrence }) {
+function ScheduledItem({
+  item,
+  pointsAwarded,
+  isCompleting,
+  onComplete,
+}: {
+  item: EventHabitOccurrence;
+  pointsAwarded?: number;
+  isCompleting: boolean;
+  onComplete: () => void;
+}) {
+  const isComplete = pointsAwarded !== undefined;
+  const isFuture = item.date > formatDate(new Date());
+
   return (
     <View style={styles.taskCard}>
       <View style={styles.taskRow}>
@@ -305,7 +375,28 @@ function ScheduledItem({ item }: { item: EventHabitOccurrence }) {
             {item.type === 'event' ? 'Event' : 'Habit'}
             {item.time ? ` · ${item.time}` : ''}
           </Text>
+          <Text style={styles.itemReward}>
+            {isComplete
+              ? `Completed · +${pointsAwarded} points`
+              : `Level ${item.importance} · ${IMPORTANCE_POINTS[item.importance]} points`}
+          </Text>
         </View>
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityLabel={`Complete ${item.title}`}
+          accessibilityState={{ checked: isComplete, disabled: isComplete || isFuture || isCompleting }}
+          disabled={isComplete || isFuture || isCompleting}
+          onPress={onComplete}
+          style={[
+            styles.completionCheckbox,
+            isComplete && styles.completedCheckbox,
+            (isFuture || isCompleting) && styles.disabledCheckbox,
+          ]}
+        >
+          <Text style={[styles.completionCheck, isComplete && styles.checkedMark]}>
+            {isComplete ? '✓' : ''}
+          </Text>
+        </Pressable>
       </View>
       {item.details ? <Text style={styles.taskDetailText}>{item.details}</Text> : null}
       {item.location ? <Text style={styles.taskDetailText}>{item.location}</Text> : null}
@@ -411,6 +502,36 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     fontSize: 13,
     fontWeight: '500',
+  },
+  itemReward: {
+    color: '#4b5563',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  completionCheckbox: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#9ca3af',
+    borderRadius: 6,
+  },
+  completedCheckbox: {
+    borderColor: '#15803d',
+    backgroundColor: '#15803d',
+  },
+  disabledCheckbox: {
+    opacity: 0.55,
+  },
+  completionCheck: {
+    color: 'transparent',
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  checkedMark: {
+    color: '#ffffff',
   },
   taskDetailText: {
     paddingHorizontal: 14,

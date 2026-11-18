@@ -28,6 +28,12 @@ export type EventHabitRecord = {
 
 export type EventHabitInput = Omit<EventHabitRecord, 'id' | 'user_id' | 'created_at'>;
 
+export type EventHabitCompletion = {
+  event_habit_id: number;
+  occurrence_date: string;
+  points_awarded: number;
+};
+
 export type CurrentUser = {
   id: string;
   username: string;
@@ -65,7 +71,10 @@ export type FriendNotification = {
 export type FriendRecord = Pick<
   ProfileRecord,
   'user_id' | 'username' | 'display_name' | 'avatar_uri'
->;
+> & {
+  points: number;
+  is_self: boolean;
+};
 
 function checkError(error: { message: string } | null) {
   if (error) {
@@ -187,6 +196,40 @@ export async function getTasks() {
   });
   checkError(error);
   return data ?? [];
+}
+
+export async function getEventHabitCompletions(
+  startDate: string,
+  endDate: string
+): Promise<EventHabitCompletion[]> {
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error('Cannot load completions without a logged-in user.');
+  }
+
+  const { data, error } = await supabase.rpc('get_event_habit_completions', {
+    p_start_date: startDate,
+    p_end_date: endDate,
+  });
+  checkError(error);
+  return data ?? [];
+}
+
+export async function completeEventHabitOccurrence(
+  eventHabitId: number,
+  occurrenceDate: string
+): Promise<number> {
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error('Cannot complete an item without a logged-in user.');
+  }
+
+  const { data, error } = await supabase.rpc('complete_event_habit_occurrence', {
+    p_event_habit_id: eventHabitId,
+    p_occurrence_date: occurrenceDate,
+  });
+  checkError(error);
+  return data ?? 0;
 }
 
 export async function getTaskCount() {

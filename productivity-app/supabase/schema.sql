@@ -24,20 +24,167 @@ create table if not exists public.events_habits (
   time text not null default '',
   location text not null default '',
   details text not null default '',
-  importance integer not null default 3,
+  importance integer not null default 3 check (importance between 1 and 5),
   recurrence text not null default 'weekly',
   selected_days text not null default '[]',
   day_times text not null default '{}',
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.task_completions (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  event_habit_id bigint not null,
+  occurrence_date date not null,
+  points_awarded integer not null check (points_awarded in (10, 15, 20, 30, 40)),
+  completed_at timestamptz not null default now(),
+  primary key (user_id, event_habit_id, occurrence_date)
+);
+
 create index if not exists tasks_user_created_idx on public.tasks (user_id, created_at desc);
 create index if not exists events_habits_user_created_idx
   on public.events_habits (user_id, created_at desc, id desc);
+create index if not exists task_completions_user_date_idx
+  on public.task_completions (user_id, occurrence_date);
 
 alter table public.profiles enable row level security;
 alter table public.tasks enable row level security;
 alter table public.events_habits enable row level security;
+alter table public.task_completions enable row level security;
+revoke all on public.task_completions from public, anon, authenticated;
+
+create or replace function public.complete_event_habit_occurrence(
+  p_event_habit_id bigint,
+  p_occurrence_date date
+)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := auth.uid();
+  item_type text;
+  item_date text;
+  item_importance integer;
+  item_recurrence text;
+  item_selected_days jsonb;
+  item_start_date date;
+  points integer;
+  awarded_points integer;
+begin
+  if current_user_id is null then
+    raise exception 'Authentication is required.';
+  end if;
+
+  select
+    scheduled_item.type,
+    scheduled_item.date,
+    scheduled_item.importance,
+    scheduled_item.recurrence,
+    scheduled_item.selected_days::jsonb
+  into item_type, item_date, item_importance, item_recurrence, item_selected_days
+  from public.events_habits as scheduled_item
+  where scheduled_item.id = p_event_habit_id
+    and scheduled_item.user_id = current_user_id;
+
+  if not found then
+    raise exception 'This scheduled item could not be found.';
+  end if;
+
+  if item_importance not between 1 and 5 then
+    raise exception 'This scheduled item has an invalid importance level.';
+  end if;
+
+  if item_type = 'event' then
+    if item_date <> p_occurrence_date::text then
+      raise exception 'This date is not a scheduled occurrence.';
+    end if;
+  elsif item_type = 'habit' then
+    if item_date !~ '^\d{4}-\d{2}-\d{2}$' then
+      raise exception 'This scheduled item has an invalid start date.';
+    end if;
+    item_start_date := item_date::date;
+    if to_char(item_start_date, 'YYYY-MM-DD') <> item_date
+      or p_occurrence_date < item_start_date then
+      raise exception 'This date is not a scheduled occurrence.';
+    end if;
+
+    if item_recurrence = 'monthly' then
+      if extract(day from p_occurrence_date) <> extract(day from item_start_date) then
+        raise exception 'This date is not a scheduled occurrence.';
+      end if;
+    else
+      if jsonb_typeof(item_selected_days) <> 'array' then
+        raise exception 'This scheduled item has invalid selected days.';
+      end if;
+      if jsonb_array_length(item_selected_days) <> 7 then
+        raise exception 'This scheduled item has invalid selected days.';
+      end if;
+      if item_selected_days ->> (extract(dow from p_occurrence_date)::integer)
+        is distinct from 'true' then
+        raise exception 'This date is not a scheduled occurrence.';
+      end if;
+      if item_recurrence = 'biweekly'
+        and mod((p_occurrence_date - item_start_date) / 7, 2) <> 0 then
+        raise exception 'This date is not a scheduled occurrence.';
+      end if;
+    end if;
+  else
+    raise exception 'This scheduled item has an invalid type.';
+  end if;
+
+  points := case item_importance
+    when 1 then 10
+    when 2 then 15
+    when 3 then 20
+    when 4 then 30
+    when 5 then 40
+  end;
+
+  insert into public.task_completions (
+    user_id, event_habit_id, occurrence_date, points_awarded
+  )
+  values (current_user_id, p_event_habit_id, p_occurrence_date, points)
+  on conflict (user_id, event_habit_id, occurrence_date) do nothing
+  returning points_awarded into awarded_points;
+
+  if awarded_points is null then
+    select completion.points_awarded
+    into awarded_points
+    from public.task_completions as completion
+    where completion.user_id = current_user_id
+      and completion.event_habit_id = p_event_habit_id
+      and completion.occurrence_date = p_occurrence_date;
+  end if;
+
+  return awarded_points;
+end;
+$$;
+
+create or replace function public.get_event_habit_completions(
+  p_start_date date,
+  p_end_date date
+)
+returns table (
+  event_habit_id bigint,
+  occurrence_date date,
+  points_awarded integer
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select completion.event_habit_id, completion.occurrence_date, completion.points_awarded
+  from public.task_completions as completion
+  where completion.user_id = (select auth.uid())
+    and completion.occurrence_date between p_start_date and p_end_date;
+$$;
+
+revoke all on function public.complete_event_habit_occurrence(bigint, date) from public, anon;
+revoke all on function public.get_event_habit_completions(date, date) from public, anon;
+grant execute on function public.complete_event_habit_occurrence(bigint, date) to authenticated;
+grant execute on function public.get_event_habit_completions(date, date) to authenticated;
 
 grant select, insert, update on public.profiles to authenticated;
 grant select, insert on public.tasks to authenticated;
@@ -295,28 +442,57 @@ begin
 end;
 $$;
 
-create or replace function public.get_friends()
+drop function if exists public.get_friends();
+create function public.get_friends()
 returns table (
   user_id uuid,
   username text,
   display_name text,
-  avatar_uri text
+  avatar_uri text,
+  points bigint,
+  is_self boolean
 )
 language sql
 stable
 security definer
 set search_path = ''
 as $$
-  select profile.user_id, profile.username, profile.display_name, profile.avatar_uri
-  from public.friend_requests as request
-  join public.profiles as profile
-    on profile.user_id = case
-      when request.requester_id = (select auth.uid()) then request.addressee_id
-      else request.requester_id
-    end
-  where (request.requester_id = (select auth.uid()) or request.addressee_id = (select auth.uid()))
-    and request.status = 'accepted'
-  order by profile.username;
+  select leaderboard.user_id, leaderboard.username, leaderboard.display_name,
+    leaderboard.avatar_uri, leaderboard.points, leaderboard.is_self
+  from (
+    select
+      profile.user_id,
+      profile.username,
+      profile.display_name,
+      profile.avatar_uri,
+      coalesce(sum(completion.points_awarded), 0)::bigint as points,
+      true as is_self
+    from public.profiles as profile
+    left join public.task_completions as completion on completion.user_id = profile.user_id
+    where profile.user_id = (select auth.uid())
+    group by profile.user_id, profile.username, profile.display_name, profile.avatar_uri
+
+    union all
+
+    select
+      profile.user_id,
+      profile.username,
+      profile.display_name,
+      profile.avatar_uri,
+      coalesce(sum(completion.points_awarded), 0)::bigint as points,
+      false as is_self
+    from public.friend_requests as request
+    join public.profiles as profile
+      on profile.user_id = case
+        when request.requester_id = (select auth.uid()) then request.addressee_id
+        else request.requester_id
+      end
+    left join public.task_completions as completion on completion.user_id = profile.user_id
+    where (request.requester_id = (select auth.uid()) or request.addressee_id = (select auth.uid()))
+      and request.status = 'accepted'
+    group by profile.user_id, profile.username, profile.display_name, profile.avatar_uri
+  ) as leaderboard
+  order by leaderboard.points desc, leaderboard.username;
 $$;
 
 create or replace function public.get_friend_notifications()

@@ -2,7 +2,7 @@ import type { EventHabitRecord } from './database';
 
 export type EventHabitOccurrence = Pick<
   EventHabitRecord,
-  'id' | 'title' | 'type' | 'time' | 'location' | 'details'
+  'id' | 'title' | 'type' | 'time' | 'location' | 'details' | 'importance'
 > & { date: string };
 
 function formatDate(date: Date) {
@@ -101,6 +101,7 @@ export function getEventHabitOccurrences(
           time: record.type === 'habit' ? getDayTime(record, date.getDay()) : record.time,
           location: record.location,
           details: record.details,
+          importance: record.importance,
         });
       }
     }
