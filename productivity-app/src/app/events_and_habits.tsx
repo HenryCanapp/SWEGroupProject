@@ -30,6 +30,7 @@ import {
   updateEventHabit,
 } from '@/lib/database';
 import { ScreenSwipe } from '@/components/screen-swipe';
+import { IMPORTANCE_POINTS } from '@/lib/points';
 
 const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const recurrenceOptions = [
@@ -569,6 +570,9 @@ export default function EventsAndHabitsPage() {
                     {[1, 2, 3, 4, 5].map((value) => (
                       <Pressable
                         key={value}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Importance level ${value}, ${IMPORTANCE_POINTS[value]} points`}
+                        accessibilityState={{ selected: draft.importance === value }}
                         onPress={() => updateDraft({ importance: value })}
                         style={[
                           styles.importanceButton,
@@ -587,6 +591,9 @@ export default function EventsAndHabitsPage() {
                       </Pressable>
                     ))}
                   </View>
+                  <Text style={styles.importanceReward}>
+                    On completion: {IMPORTANCE_POINTS[draft.importance]} points
+                  </Text>
                 </View>
               </View>
               {error && !requiredFieldsInvalid ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -696,6 +703,7 @@ const styles = StyleSheet.create({
   saveButtonText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
   importanceButtons: { flexDirection: 'row', gap: 4 },
   importanceButton: { width: 28, height: 28, borderWidth: 1, borderColor: '#d1d5db', borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
+  importanceReward: { color: '#4b5563', fontSize: 12, marginTop: 4 },
   requiredErrorText: { color: '#b91c1c', marginBottom: 8, fontSize: 13, fontWeight: '600' },
   errorText: { color: '#b91c1c', marginBottom: 8, fontSize: 13 },
 });

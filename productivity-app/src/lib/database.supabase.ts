@@ -28,6 +28,12 @@ export type EventHabitRecord = {
 
 export type EventHabitInput = Omit<EventHabitRecord, 'id' | 'user_id' | 'created_at'>;
 
+export type EventHabitCompletion = {
+  event_habit_id: number;
+  occurrence_date: string;
+  points_awarded: number;
+};
+
 export type CurrentUser = {
   id: string;
   username: string;
@@ -42,6 +48,33 @@ export type ProfileRecord = {
 };
 
 export type ProfileInput = Pick<ProfileRecord, 'display_name' | 'about_me' | 'avatar_uri'>;
+
+export type SearchableProfileRecord = Pick<
+  ProfileRecord,
+  'user_id' | 'username' | 'display_name' | 'avatar_uri'
+> & {
+  relationship_status: 'none' | 'pending_sent' | 'pending_received' | 'friends';
+};
+
+export type FriendNotification = {
+  notification_id: number;
+  notification_type: 'friend_request' | 'friend_request_accepted' | 'friend_request_declined';
+  request_id: string;
+  request_status: 'pending' | 'accepted' | 'declined' | 'removed';
+  actor_id: string;
+  actor_username: string;
+  actor_display_name: string;
+  actor_avatar_uri: string;
+  created_at: string;
+};
+
+export type FriendRecord = Pick<
+  ProfileRecord,
+  'user_id' | 'username' | 'display_name' | 'avatar_uri'
+> & {
+  points: number;
+  is_self: boolean;
+};
 
 function checkError(error: { message: string } | null) {
   if (error) {
@@ -165,6 +198,40 @@ export async function getTasks() {
   return data ?? [];
 }
 
+export async function getEventHabitCompletions(
+  startDate: string,
+  endDate: string
+): Promise<EventHabitCompletion[]> {
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error('Cannot load completions without a logged-in user.');
+  }
+
+  const { data, error } = await supabase.rpc('get_event_habit_completions', {
+    p_start_date: startDate,
+    p_end_date: endDate,
+  });
+  checkError(error);
+  return data ?? [];
+}
+
+export async function completeEventHabitOccurrence(
+  eventHabitId: number,
+  occurrenceDate: string
+): Promise<number> {
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error('Cannot complete an item without a logged-in user.');
+  }
+
+  const { data, error } = await supabase.rpc('complete_event_habit_occurrence', {
+    p_event_habit_id: eventHabitId,
+    p_occurrence_date: occurrenceDate,
+  });
+  checkError(error);
+  return data ?? 0;
+}
+
 export async function getTaskCount() {
   const { count, error } = await supabase.from('tasks').select('*', { count: 'exact', head: true });
   checkError(error);
@@ -233,6 +300,62 @@ export async function getProfile(): Promise<ProfileRecord | null> {
       avatar_uri: '',
     }
   );
+}
+
+export async function searchProfiles(searchTerm: string): Promise<SearchableProfileRecord[]> {
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error('Cannot search profiles without a logged-in user.');
+  }
+
+  const query = searchTerm.trim();
+  if (query.length < 2) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc('search_profiles', { search_term: query });
+  checkError(error);
+  return data ?? [];
+}
+
+export async function getFriends(): Promise<FriendRecord[]> {
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error('Cannot load friends without a logged-in user.');
+  }
+
+  const { data, error } = await supabase.rpc('get_friends');
+  checkError(error);
+  return data ?? [];
+}
+
+export async function sendFriendRequest(userId: string) {
+  const { error } = await supabase.rpc('send_friend_request', { target_user_id: userId });
+  checkError(error);
+}
+
+export async function respondToFriendRequest(requestId: string, accept: boolean) {
+  const { error } = await supabase.rpc('respond_to_friend_request', {
+    request_id: requestId,
+    accept_request: accept,
+  });
+  checkError(error);
+}
+
+export async function removeFriend(userId: string) {
+  const { error } = await supabase.rpc('remove_friend', { friend_user_id: userId });
+  checkError(error);
+}
+
+export async function getFriendNotifications(): Promise<FriendNotification[]> {
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error('Cannot load notifications without a logged-in user.');
+  }
+
+  const { data, error } = await supabase.rpc('get_friend_notifications');
+  checkError(error);
+  return data ?? [];
 }
 
 export async function saveProfile(input: ProfileInput) {
